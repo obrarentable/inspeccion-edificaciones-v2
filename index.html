@@ -1,0 +1,2916 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evaluación de Daños en Edificaciones – FUNVISIS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Conexión a Supabase (base de datos para reportes y fotos)
+  const SUPABASE_URL = 'https://ifxkvnphfzryrbdbdenm.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmeGt2bnBoZnpyeXJiZGJkZW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NjIyNDAsImV4cCI6MjA5ODEzODI0MH0.X03WLzHz0x-au9_u3M3I_Ux9vRp2Yj6r2KGJ6o3rA40';
+  let supabaseClient = null;
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,   // mantiene la sesión guardada en el dispositivo
+        autoRefreshToken: true  // renueva la sesión automáticamente para que no expire mientras se usa la app
+      }
+    });
+  } catch (e) {
+    console.error('No se pudo inicializar Supabase (posible falta de conexión):', e);
+  }
+</script>
+<style>
+  :root {
+    --verde: #1a7a1a;
+    --amarillo: #c8a000;
+    --rojo: #b91c1c;
+    --azul: #1e3a5f;
+    --gris: #f3f4f6;
+    --borde: #d1d5db;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #e8ecf0; color: #1a1a1a; font-size: 14px; }
+
+  header {
+    background: var(--azul);
+    color: white;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  header .logos { display: flex; gap: 8px; align-items: center; }
+  header .escudo { font-size: 28px; }
+  header h1 { font-size: 15px; font-weight: 700; line-height: 1.3; }
+  header .sub { font-size: 11px; opacity: 0.8; }
+
+  .container { max-width: 900px; margin: 24px auto; padding: 0 16px 80px; }
+
+  .section {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--borde);
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .section-header {
+    background: var(--azul);
+    color: white;
+    padding: 10px 16px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .section-body { padding: 16px; }
+
+  /* Grid helpers */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+
+  label { display: block; font-size: 12px; color: #555; margin-bottom: 3px; font-weight: 600; }
+  input[type=text], input[type=date], input[type=time], input[type=number], select, textarea {
+    width: 100%; border: 1px solid var(--borde); border-radius: 5px;
+    padding: 7px 9px; font-size: 13px; background: #fafafa;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--azul); background: white; }
+
+  /* Inspector table */
+  .inspector-table { width: 100%; border-collapse: collapse; }
+  .inspector-table th {
+    background: #e8ecf0; font-size: 11px; text-align: left;
+    padding: 6px 8px; border: 1px solid var(--borde); font-weight: 700;
+  }
+  .inspector-table td { padding: 4px 6px; border: 1px solid var(--borde); }
+  .inspector-table td input { border: none; background: transparent; padding: 4px 2px; }
+  .inspector-table td input:focus { background: #f0f4ff; border-radius: 3px; }
+  .inspector-table .fn-label { background: #e8ecf0; font-size: 11px; font-weight: 700; color: #555; padding: 6px 8px; }
+
+  /* Checkboxes */
+  .check-group { display: flex; flex-wrap: wrap; gap: 8px; }
+  .check-item { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+  .check-item input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--azul); }
+
+  /* Radio groups */
+  .radio-group { display: flex; gap: 16px; }
+  .radio-item { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; }
+  .radio-item input { accent-color: var(--azul); }
+
+  /* Structural type grid */
+  .tipo-struct { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--borde); border-radius: 6px; overflow: hidden; }
+  .tipo-col { border-right: 1px solid var(--borde); }
+  .tipo-col:last-child { border-right: none; }
+  .tipo-header { background: #e8ecf0; font-weight: 700; font-size: 11px; text-align: center; padding: 7px 4px; border-bottom: 1px solid var(--borde); color: var(--azul); }
+  .tipo-items { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+
+  /* External inspection table */
+  .ext-table { width: 100%; border-collapse: collapse; }
+  .ext-table th { background: #e8ecf0; font-size: 11px; padding: 7px 10px; border: 1px solid var(--borde); text-align: center; font-weight: 700; }
+  .ext-table th.left { text-align: left; }
+  .ext-table td { padding: 6px 10px; border: 1px solid var(--borde); vertical-align: middle; }
+  .ext-table td label { font-size: 12px; font-weight: 400; color: #333; margin: 0; }
+  .ext-table .radio-cell { display: flex; align-items: center; gap: 5px; justify-content: center; }
+
+  /* Risk badge */
+  .risk-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 6px; font-weight: 700;
+    font-size: 14px; margin-top: 10px;
+  }
+  .risk-a { background: #dcfce7; color: var(--verde); border: 2px solid #86efac; }
+  .risk-b { background: #fef9c3; color: var(--amarillo); border: 2px solid #fde047; }
+  .risk-c { background: #fee2e2; color: var(--rojo); border: 2px solid #fca5a5; }
+  .risk-none { background: #f3f4f6; color: #6b7280; border: 2px solid var(--borde); }
+
+  /* Internal inspection table */
+  .int-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .int-table th { background: #e8ecf0; padding: 7px 6px; border: 1px solid var(--borde); text-align: center; font-weight: 700; }
+  .int-table th.left { text-align: left; }
+  .int-table td { padding: 4px 6px; border: 1px solid var(--borde); text-align: center; }
+  .int-table td input { width: 100%; text-align: center; border: none; background: transparent; font-size: 12px; }
+  .int-table td input:focus { background: #f0f4ff; border-radius: 2px; }
+  .int-table .pct { background: #f9fafb; font-size: 11px; color: #555; }
+  .int-table .el-label { text-align: left; font-weight: 600; padding-left: 8px; }
+  .dmg-I { background: #dcfce7; }
+  .dmg-II { background: #d1fae5; }
+  .dmg-III { background: #fef9c3; }
+  .dmg-IV { background: #fed7aa; }
+  .dmg-V { background: #fee2e2; }
+
+  /* Damage levels section */
+  .dmg-level-table { width: 100%; border-collapse: collapse; }
+  .dmg-level-table th { background: #e8ecf0; padding: 7px 10px; border: 1px solid var(--borde); font-size: 11px; font-weight: 700; }
+  .dmg-level-table td { padding: 6px 10px; border: 1px solid var(--borde); font-size: 12px; }
+  .col-a { background: #dcfce7; }
+  .col-b { background: #fef9c3; }
+  .col-c { background: #fee2e2; }
+
+  /* Non-structural elements */
+  .nonstruct-table { width: 100%; border-collapse: collapse; }
+  .nonstruct-table th { background: #e8ecf0; padding: 7px 10px; border: 1px solid var(--borde); font-size: 11px; font-weight: 700; text-align: center; }
+  .nonstruct-table td { padding: 5px 8px; border: 1px solid var(--borde); font-size: 12px; vertical-align: middle; }
+  .nonstruct-table .ns-cell { display: flex; align-items: center; gap: 7px; }
+  .nonstruct-table .ns-cell input[type=radio] { flex-shrink: 0; width: 14px; height: 14px; accent-color: var(--azul); cursor: pointer; }
+  .nonstruct-table .ns-cell span { line-height: 1.3; }
+
+  /* Final decision cards */
+  .decision-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .decision-card {
+    border: 3px solid var(--borde); border-radius: 8px; padding: 14px 10px; text-align: center;
+    cursor: pointer; transition: all 0.2s; opacity: 0.5;
+  }
+  .decision-card.active-verde { border-color: var(--verde); background: #dcfce7; opacity: 1; }
+  .decision-card.active-amarillo { border-color: var(--amarillo); background: #fef9c3; opacity: 1; }
+  .decision-card.active-rojo { border-color: var(--rojo); background: #fee2e2; opacity: 1; }
+  .decision-card .etiqueta { font-size: 22px; margin-bottom: 6px; }
+  .decision-card .titulo { font-weight: 700; font-size: 13px; }
+  .decision-card .sub { font-size: 11px; color: #555; margin-top: 3px; }
+
+  /* Canvas */
+  #canvasCroquis { border: 1px solid var(--borde); border-radius: 4px; cursor: crosshair; display: block; background: #fff; }
+  .canvas-toolbar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .canvas-toolbar button { padding: 5px 10px; border: 1px solid var(--borde); border-radius: 4px; cursor: pointer; font-size: 12px; background: #f9fafb; }
+  .canvas-toolbar button:hover { background: #e8ecf0; }
+  .canvas-toolbar input[type=color] { width: 32px; height: 28px; border: none; padding: 0; cursor: pointer; border-radius: 4px; }
+  .canvas-toolbar input[type=range] { width: 80px; }
+
+  /* Recommendations */
+  .rec-group { margin-bottom: 12px; }
+  .rec-label { font-weight: 700; font-size: 12px; color: var(--azul); margin-bottom: 6px; }
+
+  /* Observations */
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* Photo list reference */
+  .photo-list { background: #f9fafb; border: 1px solid var(--borde); border-radius: 6px; padding: 10px 14px; font-size: 12px; line-height: 1.8; }
+  .photo-list li { list-style: disc; margin-left: 16px; }
+
+  /* Photo capture section */
+  .photo-add-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .btn-photo { display: inline-flex; align-items: center; gap: 7px; background: var(--azul); color: white; border: none; border-radius: 6px; padding: 9px 18px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+  .btn-photo:hover { background: #162d4a; }
+  .btn-photo-alt { background: #6b7280; }
+  .btn-photo-alt:hover { background: #4b5563; }
+  .geo-status { font-size: 11px; color: #6b7280; display: flex; align-items: center; gap: 5px; }
+  .geo-status.ok { color: var(--verde); }
+  .geo-status.err { color: var(--rojo); }
+
+  .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-top: 14px; }
+  .photo-card { border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+  .photo-card img { width: 100%; height: 140px; object-fit: cover; display: block; }
+  .photo-card-body { padding: 8px 10px; }
+  .photo-card-title { font-weight: 700; font-size: 12px; color: #1a1a1a; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .photo-meta { font-size: 10px; color: #6b7280; line-height: 1.6; }
+  .photo-meta span { display: block; }
+  .photo-card-del { width: 100%; background: #fee2e2; color: #b91c1c; border: none; padding: 5px; font-size: 11px; font-weight: 700; cursor: pointer; border-top: 1px solid #fca5a5; }
+  .photo-card-del:hover { background: #fca5a5; }
+  .photo-empty { text-align: center; padding: 24px; color: #9ca3af; font-size: 13px; border: 2px dashed var(--borde); border-radius: 8px; }
+
+  /* Photo title modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-start; justify-content: center; padding: 16px; overflow-y: auto; }
+  .modal-overlay.open { display: flex; }
+  .modal-box { background: white; border-radius: 10px; padding: 20px; max-width: 400px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.2); margin: auto; }
+  .modal-box h3 { font-size: 15px; margin-bottom: 14px; color: var(--azul); }
+  .modal-box label { font-size: 12px; font-weight: 700; color: #555; display: block; margin-bottom: 4px; margin-top: 10px; }
+  .modal-box select, .modal-box input[type=text] { width: 100%; font-size: 16px; padding: 10px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+  .modal-actions button { min-height: 48px; font-size: 15px; padding: 10px 20px; }
+  .photo-preview-thumb { width: 100%; height: 160px; object-fit: cover; border-radius: 6px; margin-bottom: 10px; border: 1px solid var(--borde); }
+
+  /* Buttons */
+  .btn-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid var(--borde); padding: 12px 24px; display: flex; justify-content: center; gap: 12px; z-index: 99; box-shadow: 0 -2px 8px rgba(0,0,0,0.08); }
+  .btn { padding: 10px 24px; border-radius: 6px; font-weight: 700; font-size: 14px; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: var(--azul); color: white; }
+  .btn-primary:hover { background: #162d4a; }
+  .btn-secondary { background: #e8ecf0; color: #333; border: 1px solid var(--borde); }
+  .btn-secondary:hover { background: #d1d5db; }
+  .btn-green { background: var(--verde); color: white; }
+  .btn-green:hover { background: #156015; }
+
+  /* Separator */
+  .sep { border: none; border-top: 1px solid var(--borde); margin: 14px 0; }
+
+  /* Alert box */
+  .alert { padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-top: 10px; }
+  .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+  .alert-warn { background: #fef9c3; border: 1px solid #fde047; color: #854d0e; }
+  .alert-danger { background: #fee2e2; border: 1px solid #fca5a5; color: #7f1d1d; }
+  .alert-success { background: #dcfce7; border: 1px solid #86efac; color: #14532d; }
+
+  /* Previous inspection */
+  .prev-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 13px; }
+
+  /* Tooltip-style damage guide */
+  .dmg-guide { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+  .dmg-chip { border-radius: 5px; padding: 5px 6px; font-size: 10px; text-align: center; font-weight: 700; }
+  .chip-I { background: #dcfce7; color: #166534; }
+  .chip-II { background: #d1fae5; color: #065f46; }
+  .chip-III { background: #fef9c3; color: #713f12; }
+  .chip-IV { background: #fed7aa; color: #7c2d12; }
+  .chip-V { background: #fee2e2; color: #7f1d1d; }
+
+  @media (max-width: 640px) {
+    /* Base */
+    body { font-size: 15px; }
+    .card { padding: 14px 12px; margin-bottom: 14px; }
+    .section-title { font-size: 14px; }
+
+    /* Grids → single column */
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .tipo-struct { grid-template-columns: 1fr 1fr; }
+    .decision-cards { grid-template-columns: 1fr; }
+
+    /* Inputs & labels bigger for touch */
+    input[type=text], input[type=date], input[type=time],
+    input[type=number], textarea, select {
+      font-size: 16px !important;
+      padding: 10px 10px !important;
+      min-height: 44px;
+    }
+    label { font-size: 13px; margin-bottom: 5px; }
+
+    /* Checkboxes & radios */
+    .check-item, .radio-item { font-size: 15px; gap: 8px; white-space: normal; }
+    input[type=checkbox], input[type=radio] { width: 20px; height: 20px; flex-shrink: 0; }
+
+    /* Topbar */
+    .app-topbar { padding: 8px 12px; flex-wrap: wrap; gap: 6px; }
+    .app-title { font-size: 13px; }
+    .btn-topbar { font-size: 12px; padding: 6px 10px; }
+
+    /* Btn bar — stack vertically, full width buttons */
+    .btn-bar {
+      flex-direction: column;
+      padding: 10px 12px;
+      gap: 8px;
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+    .btn-bar .btn, .btn-bar button {
+      width: 100%;
+      padding: 13px 10px;
+      font-size: 15px;
+    }
+
+    /* Tables — horizontal scroll */
+    .int-table-wrap, .ext-table, .dmg-level-table, .inspector-table {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .int-table { min-width: 560px; }
+    .int-table td input { font-size: 14px !important; min-width: 38px; }
+    .ext-table { min-width: 480px; }
+    .dmg-level-table { min-width: 420px; }
+    .nonstruct-table { min-width: 480px; }
+    .ext-table { min-width: 520px; }
+
+    /* On mobile: btn-bar static at bottom of form, not fixed */
+    .btn-bar {
+      position: static !important;
+      border-top: 2px solid var(--borde);
+      border-radius: 0 0 10px 10px;
+      margin-top: 20px;
+      box-shadow: none;
+      padding: 14px 12px;
+    }
+    #view-form { padding-bottom: 20px; }
+
+    /* Index cards */
+    .report-card { flex-wrap: wrap; gap: 8px; padding: 12px; }
+    .risk-badge-idx { font-size: 18px; width: 38px; height: 38px; }
+    .rc-name { font-size: 13px; }
+    .rc-open, .rc-del { padding: 8px 14px; font-size: 13px; }
+    .btn-new-insp { width: 100%; padding: 15px; font-size: 16px; }
+
+    /* Checklist */
+    .cl-item { font-size: 14px; padding: 10px 6px; }
+    .btn-start-insp { font-size: 16px; padding: 16px; }
+
+
+    /* Inspector table → stacked cards on mobile */
+    .inspector-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .inspector-table thead { display: none; }
+    .inspector-table tr { display: block; border: 1px solid var(--borde); border-radius: 10px; margin-bottom: 14px; padding: 12px; background: white; }
+    .inspector-table td { display: block; border: none; padding: 4px 0; }
+    .inspector-table td.fn-label { font-size: 15px; font-weight: 700; color: var(--azul); padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; }
+    .inspector-table td input { width: 100%; box-sizing: border-box; font-size: 16px !important; padding: 10px 12px !important; border: 1px solid var(--borde) !important; border-radius: 7px; background: #fafafa; margin-bottom: 4px; }
+    .inspector-table td::before { display: block; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+    .inspector-table td:nth-child(2)::before { content: "Nombre y Apellido"; }
+    .inspector-table td:nth-child(3)::before { content: "Cédula"; }
+    .inspector-table td:nth-child(4)::before { content: "Profesión"; }
+    .inspector-table td:nth-child(5)::before { content: "Teléfono"; }
+    .inspector-table td:nth-child(6)::before { content: "Correo Electrónico"; }
+
+    /* Photo section */
+    .photo-grid { grid-template-columns: repeat(2, 1fr); }
+
+    /* Canvas croquis */
+    #canvasCroquis { max-width: 100%; height: auto; touch-action: none; }
+
+    /* Decision / risk badges */
+    .risk-badge { font-size: 28px; }
+    .decision-label { font-size: 13px; }
+
+    /* Autosave bar */
+    .autosave-bar { font-size: 12px; padding: 5px 10px; }
+  }
+
+
+  /* ===== CUSTOM CONFIRM DIALOG ===== */
+  .confirm-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; padding:20px; }
+  .confirm-overlay.open { display:flex; }
+  .confirm-box { background:white; border-radius:14px; padding:24px 22px 18px; max-width:340px; width:100%; box-shadow:0 8px 32px rgba(0,0,0,0.22); }
+  .confirm-msg { font-size:15px; color:#1a1a1a; line-height:1.5; margin-bottom:20px; }
+  .confirm-btns { display:flex; gap:10px; justify-content:flex-end; }
+  .confirm-yes { background:var(--azul); color:white; border:none; border-radius:8px; padding:10px 26px; font-size:15px; font-weight:700; cursor:pointer; }
+  .confirm-no  { background:#e5e7eb; color:#374151; border:none; border-radius:8px; padding:10px 22px; font-size:15px; font-weight:700; cursor:pointer; }
+
+  /* ===== INDEX ABOUT / STEPS ===== */
+  .index-about { background:white; border:1px solid var(--borde); border-radius:10px; padding:20px 22px; margin-bottom:20px; }
+  .index-about-desc { font-size:13px; color:#374151; line-height:1.6; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:14px; }
+  .index-steps { display:flex; flex-direction:column; gap:10px; }
+  .istep { display:flex; gap:12px; align-items:flex-start; font-size:12.5px; color:#374151; line-height:1.5; }
+  .istep-num { background:var(--azul); color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; margin-top:1px; }
+
+  /* ===== MANUAL DE CAMPO (details) ===== */
+  .manual-campo { border:1px solid var(--borde); border-radius:10px; margin-bottom:20px; overflow:hidden; }
+  .manual-campo > summary { background:var(--azul); color:white; padding:12px 18px; font-size:13px; font-weight:700; cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; }
+  .manual-campo > summary::-webkit-details-marker { display:none; }
+  .manual-campo > summary::after { content:'▼'; margin-left:auto; font-size:10px; transition:transform 0.2s; }
+  .manual-campo[open] > summary::after { transform:rotate(180deg); }
+  .manual-body { padding:16px 20px; background:white; display:flex; flex-direction:column; gap:14px; }
+  .manual-section { background:#f8fafc; border:1px solid var(--borde); border-radius:8px; padding:12px 15px; font-size:12.5px; color:#374151; line-height:1.6; }
+  .manual-section-title { font-weight:700; font-size:13px; color:var(--azul); margin-bottom:6px; }
+
+  /* ===== REFERENCIA RÁPIDA (in form) ===== */
+  .quick-ref-box { border:1px solid #fde68a; border-radius:8px; margin-bottom:12px; overflow:visible; }
+  .quick-ref-box > summary { background:#fef9c3; color:#92400e; padding:10px 16px; font-size:12.5px; font-weight:700; cursor:pointer; list-style:none; display:flex; align-items:center; gap:7px; }
+  .quick-ref-box > summary::-webkit-details-marker { display:none; }
+  .quick-ref-box > summary::after { content:'▼'; margin-left:auto; font-size:10px; }
+  .quick-ref-box[open] > summary::after { content:'▲'; }
+
+  /* ===== SHARED REF TABLE ===== */
+  .ref-table-campo { width:100%; border-collapse:collapse; font-size:11.5px; }
+  .ref-table-campo th { padding:7px 9px; font-size:11px; font-weight:700; text-align:center; }
+  .ref-table-campo th:first-child { text-align:left; background:#e5e7eb; color:#374151; }
+  .ref-table-campo th.col-a { background:#dcfce7; color:#166534; }
+  .ref-table-campo th.col-b { background:#fef9c3; color:#854d0e; }
+  .ref-table-campo th.col-c { background:#fee2e2; color:#991b1b; }
+  .ref-table-campo td { padding:7px 9px; border:1px solid #e5e7eb; vertical-align:top; color:#374151; }
+  .ref-table-campo td:first-child { background:#f8fafc; min-width:140px; }
+  .ref-table-campo td:nth-child(2) { background:#f0fdf4; }
+  .ref-table-campo td:nth-child(3) { background:#fefce8; }
+  .ref-table-campo td:nth-child(4) { background:#fff7f7; }
+  .ref-table-campo tr:hover td { filter:brightness(0.97); }
+
+
+  .btn-save { background:#6366f1; color:white; }
+  .btn-save:hover { background:#4f46e5; }
+  .btn-final { background:var(--verde); color:white; border:none; border-radius:6px; padding:9px 18px; font-size:13px; font-weight:700; cursor:pointer; }
+  .btn-final:hover { background:#15803d; }
+  .status-draft { font-size:10px; background:#ede9fe; color:#6366f1; border-radius:4px; padding:1px 6px; font-weight:700; margin-left:6px; }
+  .status-final { font-size:10px; background:#dcfce7; color:#166534; border-radius:4px; padding:1px 6px; font-weight:700; margin-left:6px; }
+  .status-synced { font-size:10px; background:#dbeafe; color:#1e40af; border-radius:4px; padding:1px 6px; font-weight:700; margin-left:6px; }
+  .status-pending { font-size:10px; background:#fef3c7; color:#92400e; border-radius:4px; padding:1px 6px; font-weight:700; margin-left:6px; }
+  .btn-save:hover { background:#4f46e5; }
+  .autosave-bar { text-align:center; font-size:11px; color:#9ca3af; padding:4px 0 0; }
+  .rc-open { background:var(--azul); color:white; border:none; border-radius:6px; padding:5px 12px; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .rc-open:hover { background:#162d4a; }
+  .rc-has-data { border-left:3px solid var(--azul); }
+  .rc-no-data { border-left:3px solid #e5e7eb; }
+  .draft-badge { font-size:10px; background:#ede9fe; color:#6366f1; border-radius:4px; padding:1px 6px; font-weight:700; margin-left:6px; }
+
+  /* ===== MULTI-VIEW / TOPBAR ===== */
+  .app-topbar { display:flex; align-items:center; justify-content:space-between; background:var(--azul); color:white; padding:9px 20px; position:sticky; top:0; z-index:100; }
+  .app-topbar .app-title { font-size:14px; font-weight:700; }
+  .app-topbar .topbar-actions { display:flex; gap:10px; align-items:center; }
+  .btn-topbar { background:rgba(255,255,255,0.18); color:white; border:1px solid rgba(255,255,255,0.35); border-radius:6px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer; transition:background 0.15s; }
+  .btn-topbar:hover { background:rgba(255,255,255,0.3); }
+
+  .view { display:none; }
+  .view.active { display:block; }
+
+  /* ===== INDEX VIEW ===== */
+  .index-hero { background: linear-gradient(135deg, var(--azul) 0%, #2563eb 100%); color:white; padding:40px 24px 30px; text-align:center; }
+  .index-hero h1 { font-size:22px; margin-bottom:6px; }
+  .index-hero p { font-size:13px; opacity:0.85; }
+  .index-body { max-width:800px; margin:0 auto; padding:24px 16px; }
+  .index-actions { display:flex; gap:12px; justify-content:center; margin-bottom:28px; }
+  .btn-new-insp { background:var(--verde); color:white; border:none; border-radius:8px; padding:13px 28px; font-size:14px; font-weight:700; cursor:pointer; transition:background 0.15s; }
+  .btn-new-insp:hover { background:#15803d; }
+  .index-section-title { font-size:13px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px; }
+  .report-card { background:white; border:1px solid var(--borde); border-radius:10px; padding:14px 18px; margin-bottom:10px; display:flex; align-items:center; gap:16px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+  .report-card .risk-badge-idx { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:900; flex-shrink:0; }
+  .risk-A-idx { background:#dcfce7; color:#166534; }
+  .risk-B-idx { background:#fef9c3; color:#854d0e; }
+  .risk-C-idx { background:#fee2e2; color:#991b1b; }
+  .risk-N-idx { background:#f3f4f6; color:#6b7280; }
+  .report-card .rc-info { flex:1; min-width:0; }
+  .report-card .rc-name { font-weight:700; font-size:13px; color:#1a1a1a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .report-card .rc-meta { font-size:11px; color:#6b7280; margin-top:3px; }
+  .report-card .rc-del { background:none; border:none; color:#d1d5db; font-size:16px; cursor:pointer; padding:4px; }
+  .report-card .rc-del:hover { color:#ef4444; }
+  .index-empty { text-align:center; padding:40px 16px; color:#9ca3af; }
+  .index-empty .ie-icon { font-size:40px; margin-bottom:12px; }
+
+  /* ===== CHECKLIST VIEW ===== */
+  .checklist-container { max-width:640px; margin:0 auto; padding:24px 16px; }
+  .checklist-header { text-align:center; margin-bottom:28px; }
+  .checklist-header h2 { font-size:20px; color:var(--azul); }
+  .checklist-header p { font-size:13px; color:#6b7280; margin-top:6px; }
+  .checklist-group { background:white; border:1px solid var(--borde); border-radius:10px; margin-bottom:18px; overflow:hidden; }
+  .checklist-group-header { background:var(--azul); color:white; padding:10px 16px; font-size:13px; font-weight:700; }
+  .checklist-item { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #f1f5f9; }
+  .checklist-item:last-child { border-bottom:none; }
+  .checklist-item input[type=checkbox] { width:18px; height:18px; accent-color:var(--verde); flex-shrink:0; cursor:pointer; }
+  .checklist-item label { font-size:13px; cursor:pointer; line-height:1.4; }
+  .checklist-item .req-tag { font-size:10px; background:#fee2e2; color:#991b1b; border-radius:4px; padding:1px 5px; font-weight:700; margin-left:auto; flex-shrink:0; }
+  .checklist-item .opt-tag { font-size:10px; background:#f0fdf4; color:#166534; border-radius:4px; padding:1px 5px; font-weight:700; margin-left:auto; flex-shrink:0; }
+  .checklist-progress { background:#f3f4f6; border-radius:8px; height:8px; margin:0 16px 16px; overflow:hidden; }
+  .checklist-progress-fill { height:100%; background:var(--verde); border-radius:8px; transition:width 0.3s; }
+  .checklist-status { text-align:center; font-size:12px; color:#6b7280; margin-bottom:16px; }
+  .btn-start-insp { width:100%; padding:14px; background:var(--verde); color:white; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; transition:background 0.15s; }
+  .btn-start-insp:hover:not(:disabled) { background:#15803d; }
+  .btn-start-insp:disabled { background:#9ca3af; cursor:not-allowed; }
+
+  /* ===== GLOSSARY MODAL ===== */
+  #glossaryModal .modal-box { max-width:600px; max-height:80vh; overflow-y:auto; }
+  .gloss-entry { border-bottom:1px solid #f1f5f9; padding:10px 0; }
+  .gloss-entry:last-child { border-bottom:none; }
+  .gloss-term { font-weight:700; font-size:13px; color:var(--azul); }
+  .gloss-def { font-size:12px; color:#374151; margin-top:3px; line-height:1.5; }
+  .gloss-ref { font-size:10px; color:#9ca3af; margin-top:2px; }
+
+  /* ===== AUTH (LOGIN / REGISTRO) ===== */
+  .auth-wrap { min-height: calc(100vh - 56px); display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: #e8ecf0; }
+  .auth-box { background: white; border-radius: 12px; padding: 32px 28px; max-width: 380px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+  .auth-title { font-size: 19px; color: var(--azul); margin-bottom: 6px; text-align: center; }
+  .auth-sub { font-size: 12px; color: #6b7280; text-align: center; margin-bottom: 22px; line-height: 1.4; }
+  .auth-tabs { display: flex; border-bottom: 2px solid var(--gris); margin-bottom: 20px; }
+  .auth-tab { flex: 1; background: none; border: none; padding: 10px; font-size: 13px; font-weight: 700; color: #9ca3af; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .auth-tab.active { color: var(--azul); border-bottom-color: var(--azul); }
+  .auth-form label { font-size: 12px; font-weight: 700; color: #555; display: block; margin-bottom: 4px; margin-top: 12px; }
+  .auth-form input { width: 100%; font-size: 15px; padding: 11px; border: 1px solid var(--borde); border-radius: 6px; }
+  .btn-auth-primary { width: 100%; background: var(--azul); color: white; border: none; border-radius: 6px; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 18px; min-height: 48px; }
+  .btn-auth-primary:hover { background: #15294a; }
+  .btn-auth-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+  .auth-link { display: block; width: 100%; background: none; border: none; color: var(--azul); font-size: 12px; font-weight: 600; text-align: center; margin-top: 12px; cursor: pointer; text-decoration: underline; padding: 4px; }
+  .auth-link:hover { color: #15294a; }
+  .auth-msg { font-size: 12px; margin-top: 10px; padding: 8px 10px; border-radius: 6px; display: none; }
+  .auth-msg.show { display: block; }
+  .auth-msg.err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .auth-msg.ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .auth-footnote { font-size: 11px; color: #9ca3af; text-align: center; margin-top: 20px; line-height: 1.4; }
+  .topbar-user { font-size: 12px; opacity: 0.85; margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ===== TOPBAR ===== -->
+<div class="app-topbar">
+  <span class="app-title">🏛 Evaluación de Daños ANIH – Venezuela</span>
+  <div class="topbar-actions">
+    <span class="topbar-user" id="topbarUser" style="display:none"></span>
+    <button class="btn-topbar" onclick="showView('index')">🏠 Inicio</button>
+    <button class="btn-topbar" onclick="openGlossary()">📖 Glosario</button>
+    <button class="btn-topbar" id="btnLogout" onclick="handleLogout()" style="display:none">🚪 Salir</button>
+  </div>
+</div>
+
+<!-- ===== VIEW: AUTENTICACIÓN (LOGIN / REGISTRO) ===== -->
+<div id="view-auth" class="view">
+  <div class="auth-wrap">
+    <div class="auth-box">
+      <h1 class="auth-title">🏛 Evaluación de Daños</h1>
+      <p class="auth-sub">Sistema de Inspección de Edificaciones · Acceso de inspectores</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Iniciar sesión</button>
+        <button class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">Crear cuenta</button>
+      </div>
+
+      <!-- LOGIN -->
+      <div id="authLoginForm" class="auth-form">
+        <label>Correo electrónico</label>
+        <input type="email" id="loginEmail" placeholder="tu@correo.com" autocomplete="username">
+        <label>Contraseña</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+        <button class="btn-auth-primary" onclick="handleLogin()">Iniciar sesión</button>
+        <button class="auth-link" onclick="handleForgotPassword()" type="button">¿Olvidó su contraseña?</button>
+        <div class="auth-msg" id="loginMsg"></div>
+      </div>
+
+      <!-- REGISTRO -->
+      <div id="authRegisterForm" class="auth-form" style="display:none">
+        <label>Nombre completo</label>
+        <input type="text" id="regNombre" placeholder="Nombre y apellido" autocomplete="name">
+        <label>Correo electrónico</label>
+        <input type="email" id="regEmail" placeholder="tu@correo.com" autocomplete="username">
+        <label>Contraseña</label>
+        <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        <button class="btn-auth-primary" onclick="handleRegister()">Crear cuenta</button>
+        <div class="auth-msg" id="registerMsg"></div>
+      </div>
+
+      <p class="auth-footnote">Este sistema requiere una cuenta de inspector para guardar y sincronizar los reportes de forma segura.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== VIEW: INDEX ===== -->
+<div id="view-index" class="view active">
+  <div class="index-hero">
+    <h1>Sistema de Inspección de Edificaciones</h1>
+    <p>Instrumento para Evaluación de Daños Post-Sismo · FUNVISIS · Boletín ANIH 61</p>
+  </div>
+  <div class="index-body">
+
+    <!-- Descripción y proceso -->
+    <div class="index-about">
+      <p class="index-about-desc">Herramienta digital oficial para la evaluación expedita de daños en edificaciones afectadas por sismos, basada en la metodología del <strong>Boletín ANIH 61 (FUNVISIS)</strong>. Calcula el nivel de riesgo automáticamente y genera el reporte en PDF con el formato oficial de la <strong>Planilla V22b</strong>.</p>
+      <div class="index-steps">
+        <div class="istep"><span class="istep-num">①</span><div><strong>Capacitación previa</strong> — El uso de este instrumento está reservado a inspectores certificados por FUNVISIS o ente autorizado.</div></div>
+        <div class="istep"><span class="istep-num">②</span><div><strong>Material necesario</strong> — Identificación institucional, libreta, bolígrafo, tabla de apoyo, dispositivo móvil con cámara e internet, fisurometro, cinta métrica, plomada de 60 cm, martillo, linterna, tapabocas, gel desinfectante y etiquetas.</div></div>
+        <div class="istep"><span class="istep-num">③</span><div><strong>Seguridad personal</strong> — Casco, botas, lentes de seguridad y chaleco reflectante obligatorios. Recorra el perímetro antes de entrar. No toque cables eléctricos. Si detecta gas, cierre la fuente, notifique al propietario y contacte a los bomberos.</div></div>
+        <div class="istep"><span class="istep-num">④</span><div><strong>Llenado del formulario</strong> — Complete las 14 secciones del instrumento. Consulte el Manual de Campo para guía detallada por sección.</div></div>
+        <div class="istep"><span class="istep-num">⑤</span><div><strong>Fotografías</strong> — Adjunte fotos con geolocalización y marca de tiempo desde la sección de observaciones.</div></div>
+        <div class="istep"><span class="istep-num">⑥</span><div><strong>Decisión final</strong> — El sistema calcula el nivel de riesgo (A · B · C) automáticamente según los datos ingresados.</div></div>
+        <div class="istep"><span class="istep-num">⑦</span><div><strong>Etiqueta y PDF</strong> — Coloque la etiqueta seleccionada (Verde, Amarilla o Roja) en un sitio claramente visible a la entrada de la edificación. Exporte el reporte oficial.</div></div>
+      </div>
+    </div>
+
+    <!-- Manual de Campo (desplegable) -->
+    <details class="manual-campo">
+      <summary>📋 Manual de Campo – Instrucciones de uso</summary>
+      <div class="manual-body">
+
+        <div class="manual-section">
+          <div class="manual-section-title">Material Necesario</div>
+          <p>Identificación institucional, libreta, lápiz o bolígrafo, tabla de apoyo, dispositivo móvil con cámara e internet, fisurometro, cinta métrica, plomada de 60 cm, martillo, linterna, líquidos para hidratación, tapabocas, gel desinfectante y etiquetas (Verde, Amarilla, Roja).</p>
+        </div>
+
+        <div class="manual-section">
+          <div class="manual-section-title">Seguridad</div>
+          <p>Cada inspector debe portar: casco, botas y lentes de seguridad, así como chaleco con cintas reflectantes y/o colores resaltantes. Antes de entrar, recorra el perímetro y verifique que no haya peligro de derrumbe. Evite exponerse debajo de objetos en peligro de caer. No toque cables de energía eléctrica. Si huele a gas: contacte al propietario, cierre la fuente de gas, notifique a bomberos y desaloje el lugar.</p>
+        </div>
+
+        <div class="manual-section">
+          <div class="manual-section-title">Encabezado del Formulario</div>
+          <p><strong>Tipo de evento:</strong> Sismo, Deslizamiento de tierra, Asentamiento, Explosión u otro.<br>
+          <strong>Fecha del evento:</strong> día/mes/año de la ocurrencia (ej. Sismo 04/11/2019).<br>
+          <strong>Fecha de la inspección:</strong> Indique la fecha y la hora de inicio y finalización.</p>
+        </div>
+
+        <div class="manual-section">
+          <div class="manual-section-title">1. Información General</div>
+          <p><strong>Coordenadas:</strong> Latitud y Longitud del sitio (se pueden obtener con Google Maps).<br>
+          <strong>Uso de la edificación:</strong> Si tiene más de un uso, indique el uso predominante.<br>
+          <strong>Material y Tipo Estructural:</strong> Indique el tipo de material predominante. Por Mampostería informal se entiende las viviendas populares con predominancia de paredes de bloques que soportan el techo.</p>
+        </div>
+
+        <div class="manual-section">
+          <div class="manual-section-title">2. Inspección Externa</div>
+          <p><strong>Riesgo geológico:</strong> Incluye deslizamiento, licuefacción, socavación y agrietamiento del terreno.<br>
+          <strong>Inclinación del edificio:</strong> Cuelgue la plomada de 60 cm sobre la pared inclinada y mida la distancia horizontal <em>d</em>. Marque "sin inclinación" si d ≤ 2 cm, "b" si 2 cm &lt; d ≤ 4 cm, o "c" si d &gt; 4 cm.</p>
+        </div>
+
+        <div class="manual-section">
+          <div class="manual-section-title">4. Inspección de Elementos Estructurales Principales</div>
+          <p>Identifique el piso crítico. Inspeccione todos los elementos accesibles y cuente los dañados por grupo (columnas, vigas, muros, otro). Calcule el porcentaje de daño: cantidad de elementos dañados ÷ total de elementos. Si no es posible visualizar los elementos, estime el porcentaje y seleccione la casilla que mejor corresponda.</p>
+        </div>
+
+        <div class="manual-section">
+          <div class="manual-section-title">5. Guía de Niveles de Daño por Material</div>
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ref-table-campo" style="min-width:520px">
+            <thead>
+              <tr>
+                <th>Elemento</th>
+                <th class="col-a">Sin Daño / Leve</th>
+                <th class="col-b">Moderado</th>
+                <th class="col-c">Severo / Completo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Columna, viga, losa, techo, unión<br>Concreto armado</strong></td>
+                <td>Grietas &lt; 1 mm</td>
+                <td>1 mm ≤ Grietas &lt; 2 mm</td>
+                <td>Grietas &gt; 2 mm · Caída de recubrimiento · Pandeo o fractura de barras · Desplazamiento residual</td>
+              </tr>
+              <tr>
+                <td><strong>Muro<br>Concreto armado</strong></td>
+                <td>Grietas &lt; 2 mm</td>
+                <td>2 mm ≤ Grietas &lt; 6 mm</td>
+                <td>Grietas &gt; 6 mm · Caída de recubrimiento · Pandeo o fractura de barras · Desplazamiento residual</td>
+              </tr>
+              <tr>
+                <td><strong>Paredes de relleno<br>Mampostería</strong></td>
+                <td>Grietas &lt; 1 mm</td>
+                <td>1 mm ≤ Grietas &lt; 10 mm · Grietas diagonales · Desprendimiento en algunas zonas</td>
+                <td>Derrumbe parcial o total de porciones de la pared</td>
+              </tr>
+              <tr>
+                <td><strong>Columna, viga, unión<br>Acero</strong></td>
+                <td>Pequeñas deformaciones, casi imperceptibles</td>
+                <td>Pandeo incipiente en secciones de vigas o columnas</td>
+                <td>Pandeo local · Fractura en sección de viga o columna · Fractura de soldadura o tornillos · Fractura de placa base</td>
+              </tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="manual-section" style="background:#fef9c3;border-color:#fde047">
+          <div class="manual-section-title" style="color:#854d0e">Etiquetas de Inspección</div>
+          <p>Coloque la etiqueta seleccionada (<strong style="color:var(--verde)">Verde</strong>, <strong style="color:#ca8a04">Amarilla</strong> o <strong style="color:var(--rojo)">Roja</strong>) en un sitio claramente visible a la entrada de la edificación.</p>
+        </div>
+
+      </div>
+    </details>
+
+    <div class="index-actions" style="margin-top:0;margin-bottom:24px">
+      <button class="btn-new-insp" onclick="showView('checklist')">＋ Nueva Inspección</button>
+    </div>
+
+    <div class="index-section-title">Inspecciones Registradas</div>
+    <div id="reportsList"></div>
+  </div>
+</div>
+
+<!-- ===== VIEW: CHECKLIST PRE-INSPECCIÓN ===== -->
+<div id="view-checklist" class="view">
+  <div class="checklist-container">
+    <div class="checklist-header">
+      <h2>✅ Lista de Verificación Pre-Inspección</h2>
+      <p>Confirme que cuenta con el equipo y documentación necesarios antes de iniciar la evaluación.</p>
+    </div>
+
+    <!-- Equipo de Seguridad -->
+    <div class="checklist-group">
+      <div class="checklist-group-header">🦺 Equipo de Protección Personal (EPP)</div>
+      <div id="cl-epp">
+        <div class="checklist-item"><input type="checkbox" id="cl1" class="cl-req" onchange="updateChecklist()"><label for="cl1">Casco de seguridad</label><span class="req-tag">Obligatorio</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl2" class="cl-req" onchange="updateChecklist()"><label for="cl2">Zapatos de seguridad (punta de acero)</label><span class="req-tag">Obligatorio</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl3" class="cl-req" onchange="updateChecklist()"><label for="cl3">Chaleco reflectivo o de inspector</label><span class="req-tag">Obligatorio</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl4" onchange="updateChecklist()"><label for="cl4">Guantes de trabajo</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl5" onchange="updateChecklist()"><label for="cl5">Lentes de protección</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl6" onchange="updateChecklist()"><label for="cl6">Mascarilla o respirador (para polvo)</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl7" onchange="updateChecklist()"><label for="cl7">Linterna (en caso de falta de luz)</label><span class="opt-tag">Recomendado</span></div>
+      </div>
+    </div>
+
+    <!-- Herramientas y Equipos -->
+    <div class="checklist-group">
+      <div class="checklist-group-header">🔧 Herramientas y Materiales</div>
+      <div>
+        <div class="checklist-item"><input type="checkbox" id="cl8" class="cl-req" onchange="updateChecklist()"><label for="cl8">Formulario de inspección (Planilla V22b) o acceso digital</label><span class="req-tag">Obligatorio</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl9" onchange="updateChecklist()"><label for="cl9">Cámara o teléfono con GPS activo</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl10" onchange="updateChecklist()"><label for="cl10">Cinta métrica o distanciómetro</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl11" onchange="updateChecklist()"><label for="cl11">Nivel de burbuja</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl12" onchange="updateChecklist()"><label for="cl12">Radio o medio de comunicación</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl13" onchange="updateChecklist()"><label for="cl13">Botiquín de primeros auxilios</label><span class="opt-tag">Recomendado</span></div>
+      </div>
+    </div>
+
+    <!-- Identificación y Autorización -->
+    <div class="checklist-group">
+      <div class="checklist-group-header">🪪 Identificación y Autorización</div>
+      <div>
+        <div class="checklist-item"><input type="checkbox" id="cl14" class="cl-req" onchange="updateChecklist()"><label for="cl14">Cédula de identidad vigente</label><span class="req-tag">Obligatorio</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl15" class="cl-req" onchange="updateChecklist()"><label for="cl15">Credencial o carné de inspector autorizado</label><span class="req-tag">Obligatorio</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl16" onchange="updateChecklist()"><label for="cl16">Carta de autorización o comisión oficial</label><span class="opt-tag">Recomendado</span></div>
+        <div class="checklist-item"><input type="checkbox" id="cl17" onchange="updateChecklist()"><label for="cl17">Coordinadas o dirección del sitio confirmadas</label><span class="opt-tag">Recomendado</span></div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="checklist-progress"><div class="checklist-progress-fill" id="clProgressBar" style="width:0%"></div></div>
+    <div class="checklist-status" id="clStatus">0 de 5 items obligatorios completados</div>
+
+    <button class="btn-start-insp" id="btnStartInsp" onclick="startInspection()">
+      Iniciar Inspección →
+    </button>
+    <p style="text-align:center;font-size:11px;color:#9ca3af;margin-top:10px">
+      Deben completarse todos los items <strong>Obligatorios</strong> para continuar.
+    </p>
+  </div>
+</div>
+
+<!-- ===== VIEW: FORMULARIO ===== -->
+<div id="view-form" class="view">
+
+<header>
+  <div class="logos">
+    <span class="escudo">🇻🇪</span>
+  </div>
+  <div>
+    <div class="sub">Gobierno Bolivariano de Venezuela · Ministerio del Poder Popular · FUNVISIS</div>
+    <h1>Instrumento para Inspección de Edificaciones Afectadas por Sismos</h1>
+  </div>
+</header>
+
+<div class="container">
+
+<!-- ===== SECCIÓN 1: DATOS DE LOS INSPECTORES ===== -->
+<div class="section">
+  <div class="section-header">1. Datos de los Inspectores</div>
+  <div class="section-body">
+    <div class="inspector-table-wrap"><table class="inspector-table" id="inspectorTable">
+      <thead>
+        <tr>
+          <th>Función</th>
+          <th>Nombre y Apellido</th>
+          <th>Cédula</th>
+          <th>Profesión</th>
+          <th>Teléfono</th>
+          <th>Correo Electrónico</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="fn-label">Inspector</td>
+          <td><input type="text" id="insp1_nombre" placeholder="Nombre completo"></td>
+          <td><input type="text" id="insp1_cedula" placeholder="V-00000000"></td>
+          <td><input type="text" id="insp1_profesion" placeholder="Ing. Civil"></td>
+          <td><input type="text" id="insp1_telefono" placeholder="+58 412-000-0000"></td>
+          <td><input type="text" id="insp1_correo" placeholder="correo@ejemplo.com"></td>
+        </tr>
+        <tr>
+          <td class="fn-label">Inspector</td>
+          <td><input type="text" id="insp2_nombre"></td>
+          <td><input type="text" id="insp2_cedula"></td>
+          <td><input type="text" id="insp2_profesion"></td>
+          <td><input type="text" id="insp2_telefono"></td>
+          <td><input type="text" id="insp2_correo"></td>
+        </tr>
+        <tr>
+          <td class="fn-label">Supervisor</td>
+          <td><input type="text" id="sup_nombre"></td>
+          <td><input type="text" id="sup_cedula"></td>
+          <td><input type="text" id="sup_profesion"></td>
+          <td><input type="text" id="sup_telefono"></td>
+          <td><input type="text" id="sup_correo"></td>
+        </tr>
+      </tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 2: DATOS GENERALES ===== -->
+<div class="section">
+  <div class="section-header">2. Datos Generales</div>
+  <div class="section-body">
+    <div class="grid-2" style="margin-bottom:10px">
+      <div><label>Nombre de la Edificación</label><input type="text" id="nombre_edif" placeholder="Nombre o identificación"></div>
+      <div><label>Hora de Inicio</label><input type="time" id="hora_inicio"></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:10px">
+      <div><label>Fecha</label><input type="date" id="fecha"></div>
+      <div><label>Nº de Pisos</label><input type="number" id="n_pisos" min="1" placeholder="0"></div>
+      <div><label>Nº Semisótanos</label><input type="number" id="n_semisotanos" min="0" placeholder="0"></div>
+      <div><label>Nº Sótanos</label><input type="number" id="n_sotanos" min="0" placeholder="0"></div>
+    </div>
+    <div class="grid-4" style="margin-bottom:10px">
+      <div><label>Estado</label>
+        <input type="text" id="estado" placeholder="Estado" list="lista-estados" autocomplete="off">
+        <datalist id="lista-estados">
+          <option value="Amazonas">
+          <option value="Anzoátegui">
+          <option value="Apure">
+          <option value="Aragua">
+          <option value="Barinas">
+          <option value="Bolívar">
+          <option value="Carabobo">
+          <option value="Cojedes">
+          <option value="Delta Amacuro">
+          <option value="Distrito Capital">
+          <option value="Falcón">
+          <option value="Guárico">
+          <option value="La Guaira">
+          <option value="Lara">
+          <option value="Mérida">
+          <option value="Miranda">
+          <option value="Monagas">
+          <option value="Nueva Esparta">
+          <option value="Portuguesa">
+          <option value="Sucre">
+          <option value="Táchira">
+          <option value="Trujillo">
+          <option value="Yaracuy">
+          <option value="Zulia">
+        </datalist>
+      </div>
+      <div><label>Ciudad</label><input type="text" id="ciudad" placeholder="Ciudad"></div>
+      <div><label>Municipio</label><input type="text" id="municipio" placeholder="Municipio"></div>
+      <div><label>Parroquia</label><input type="text" id="parroquia" placeholder="Parroquia"></div>
+    </div>
+    <div class="grid-3" style="margin-bottom:10px">
+      <div><label>Urbanización / Sector</label><input type="text" id="urb" placeholder="Urb. / Sector"></div>
+      <div><label>Avenida / Calle</label><input type="text" id="calle" placeholder="Ave. o Calle"></div>
+      <div><label>Sector</label><input type="text" id="sector" placeholder="Sector"></div>
+    </div>
+    <div class="grid-3">
+      <div><label>Coord UTM – X</label><input type="text" id="coord_x" placeholder="Ej: 736000"></div>
+      <div><label>Coord UTM – Y</label><input type="text" id="coord_y" placeholder="Ej: 1150000"></div>
+      <div><label>Huso</label><input type="text" id="huso" placeholder="Ej: 19N"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 3: USO DE LA EDIFICACIÓN ===== -->
+<div class="section">
+  <div class="section-header">3. Uso de la Edificación</div>
+  <div class="section-body">
+    <div class="check-group" id="usoGroup">
+      <label class="check-item"><input type="checkbox" value="Gubernamental" onchange="updateUso()"> Gubernamental</label>
+      <label class="check-item"><input type="checkbox" value="Militar" onchange="updateUso()"> Militar</label>
+      <label class="check-item"><input type="checkbox" value="Médico-Asistencial" onchange="updateUso()"> Médico-Asistencial</label>
+      <label class="check-item"><input type="checkbox" value="Industrial" onchange="updateUso()"> Industrial</label>
+      <label class="check-item"><input type="checkbox" value="Otros" onchange="updateUso()"> Otros</label>
+      <label class="check-item"><input type="checkbox" value="Bomberos" onchange="updateUso()"> Bomberos</label>
+      <label class="check-item"><input type="checkbox" value="Vivienda Popular" onchange="updateUso()"> Vivienda Popular</label>
+      <label class="check-item"><input type="checkbox" value="Educativo" onchange="updateUso()"> Educativo</label>
+      <label class="check-item"><input type="checkbox" value="Comercial" onchange="updateUso()"> Comercial</label>
+      <label class="check-item"><input type="checkbox" value="Protección Civil" onchange="updateUso()"> Protección Civil</label>
+      <label class="check-item"><input type="checkbox" value="Vivienda Unifamiliar" onchange="updateUso()"> Vivienda Unifamiliar</label>
+      <label class="check-item"><input type="checkbox" value="Deportivo-Recreativo" onchange="updateUso()"> Deportivo-Recreativo</label>
+      <label class="check-item"><input type="checkbox" value="Oficina" onchange="updateUso()"> Oficina</label>
+      <label class="check-item"><input type="checkbox" value="Policial" onchange="updateUso()"> Policial</label>
+      <label class="check-item"><input type="checkbox" value="Vivienda Multifamiliar" onchange="updateUso()"> Vivienda Multifamiliar</label>
+      <label class="check-item"><input type="checkbox" value="Cultural" onchange="updateUso()"> Cultural</label>
+      <label class="check-item"><input type="checkbox" value="Religioso" onchange="updateUso()"> Religioso</label>
+    </div>
+    <div id="usoEspecifique" style="display:none;margin-top:8px">
+      <label>Especifique otro uso:</label>
+      <input type="text" id="uso_otro" placeholder="Descripción">
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 4: TIPO ESTRUCTURAL ===== -->
+<div class="section">
+  <div class="section-header">4. Tipo Estructural</div>
+  <div class="section-body">
+    <div class="tipo-struct">
+      <div class="tipo-col">
+        <div class="tipo-header">CONCRETO ARMADO</div>
+        <div class="tipo-items">
+          <label class="check-item"><input type="checkbox" id="te_porticos_ca"> Pórticos</label>
+          <label class="check-item"><input type="checkbox" id="te_muros_ca"> Muros</label>
+          <label class="check-item"><input type="checkbox" id="te_prefabricados"> Prefabricados</label>
+        </div>
+      </div>
+      <div class="tipo-col">
+        <div class="tipo-header">ACERO</div>
+        <div class="tipo-items">
+          <label class="check-item"><input type="checkbox" id="te_porticos_arriostrados"> Pórticos arriostrados</label>
+          <label class="check-item"><input type="checkbox" id="te_porticos_no_arriostrados"> Pórticos no arriostrados</label>
+          <div style="font-size:11px;font-weight:700;color:#555;margin-top:4px">Conexiones:</div>
+          <label class="check-item"><input type="checkbox" id="te_apernadas"> Apernadas</label>
+          <label class="check-item"><input type="checkbox" id="te_soldadas"> Soldadas</label>
+          <label class="check-item"><input type="checkbox" id="te_mixtas_acero"> Mixtas</label>
+        </div>
+      </div>
+      <div class="tipo-col">
+        <div class="tipo-header">MAMPOSTERÍA</div>
+        <div class="tipo-items">
+          <label class="check-item"><input type="checkbox" id="te_confinada"> Confinada</label>
+          <label class="check-item"><input type="checkbox" id="te_no_confinada"> No confinada</label>
+          <label class="check-item"><input type="checkbox" id="te_mixta_porticos"> Sistemas mixtos de pórticos de baja calidad</label>
+        </div>
+      </div>
+      <div class="tipo-col">
+        <div class="tipo-header">OTROS</div>
+        <div class="tipo-items">
+          <label class="check-item"><input type="checkbox" id="te_precaria"> Construcción precaria</label>
+          <label class="check-item"><input type="checkbox" id="te_bahareque"> Bahareque</label>
+          <label class="check-item"><input type="checkbox" id="te_otros_struct"> Otros:</label>
+          <input type="text" id="te_otros_texto" placeholder="Especifique" style="margin-top:4px;font-size:12px">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 5: INSPECCIÓN EXTERNA ===== -->
+<div class="section">
+  <div class="section-header">5. Inspección Externa Sin Accesar a la Edificación</div>
+  <div class="section-body">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ext-table" id="extTable" style="min-width:520px"
+      <thead>
+        <tr>
+          <th class="left" style="width:30%">Clasificación</th>
+          <th style="width:23%;background:#dcfce7">a</th>
+          <th style="width:23%;background:#fef9c3">b</th>
+          <th style="width:23%;background:#fee2e2">c</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Colapso de la estructura</strong></td>
+          <td><div class="radio-cell"><input type="radio" name="colapso" value="a" onchange="calcExtRisk()"><label>No</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="colapso" value="b" onchange="calcExtRisk()"><label>Parcial</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="colapso" value="c" onchange="calcExtRisk()"><label>Total</label></div></td>
+        </tr>
+        <tr>
+          <td><strong>Riesgo de edificios aledaños</strong></td>
+          <td><div class="radio-cell"><input type="radio" name="aledanos" value="a" onchange="calcExtRisk()"><label>No</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="aledanos" value="b" onchange="calcExtRisk()"><label>Moderado</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="aledanos" value="c" onchange="calcExtRisk()"><label>Elevado</label></div></td>
+        </tr>
+        <tr>
+          <td><strong>Amenaza geológica</strong></td>
+          <td><div class="radio-cell"><input type="radio" name="geologica" value="a" onchange="calcExtRisk()"><label>No</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="geologica" value="b" onchange="calcExtRisk()"><label>Moderada</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="geologica" value="c" onchange="calcExtRisk()"><label>Elevada</label></div></td>
+        </tr>
+        <tr>
+          <td><strong>Asentamiento del edificio</strong></td>
+          <td><div class="radio-cell"><input type="radio" name="asentamiento" value="a" onchange="calcExtRisk()"><label>&lt; 0,2 m</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="asentamiento" value="b" onchange="calcExtRisk()"><label>0,2 m – 1 m</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="asentamiento" value="c" onchange="calcExtRisk()"><label>&gt; 1 m</label></div></td>
+        </tr>
+        <tr>
+          <td><strong>Inclinación del edificio</strong></td>
+          <td><div class="radio-cell"><input type="radio" name="inclinacion" value="a" onchange="calcExtRisk()"><label>&lt; 1 cm / 60 cm</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="inclinacion" value="b" onchange="calcExtRisk()"><label>1 cm / 60 cm – 2 cm / 60 cm</label></div></td>
+          <td><div class="radio-cell"><input type="radio" name="inclinacion" value="c" onchange="calcExtRisk()"><label>&gt; 2 cm / 60 cm</label></div></td>
+        </tr>
+      </tbody>
+    </table></div>
+
+    <div style="margin-top:14px">
+      <strong style="font-size:12px">5.1 Nivel de Riesgo Externo</strong>
+      <div id="extRiskDisplay" class="risk-badge risk-none">– Sin calificar –</div>
+      <div id="extRiskAlert" class="alert" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 6: ¿INSPECCIÓN INTERNA? ===== -->
+<div class="section">
+  <div class="section-header">6. ¿Se Requiere Inspección Interna?</div>
+  <div class="section-body">
+    <div class="radio-group">
+      <label class="radio-item"><input type="radio" name="inspeccion_interna" value="si" onchange="toggleInternal()"> <strong>Sí</strong></label>
+      <label class="radio-item"><input type="radio" name="inspeccion_interna" value="no" onchange="toggleInternal()"> <strong>No</strong></label>
+    </div>
+    <p id="internalNote" style="font-size:12px;color:#555;margin-top:8px;display:none">
+      ⚠️ Si el Riesgo Externo es <strong>C (Alto)</strong>, no se requiere inspección interna. Proceda directamente a la Decisión Final.
+    </p>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 7: CROQUIS DE PLANTA ===== -->
+<div class="section" id="sectionCroquis">
+  <div class="section-header">7. Croquis de Planta (Piso Crítico)</div>
+  <div class="section-body">
+    <div class="canvas-toolbar">
+      <button onclick="clearCanvas()">🗑 Limpiar</button>
+      <button onclick="setTool('pen')" id="btnPen" style="font-weight:bold">✏️ Lápiz</button>
+      <button onclick="setTool('eraser')" id="btnEraser">⬜ Borrador</button>
+      <label style="margin:0;font-weight:400;font-size:12px">Color: <input type="color" id="penColor" value="#000000"></label>
+      <label style="margin:0;font-weight:400;font-size:12px">Tamaño: <input type="range" id="penSize" min="1" max="12" value="2"></label>
+    </div>
+    <canvas id="canvasCroquis" width="820" height="300" style="max-width:100%"></canvas>
+    <p style="font-size:11px;color:#888;margin-top:4px">Use el lienzo para esbozar la planta del piso crítico. Dibuje con el ratón o el dedo (táctil).</p>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 8: INSPECCIÓN INTERNA ===== -->
+<div class="section" id="sectionInterna">
+  <div class="section-header">8. Inspección Interna</div>
+  <div class="section-body">
+    <div class="grid-2" style="margin-bottom:12px">
+      <div><label>Pisos Inspeccionados</label><input type="text" id="pisos_insp" placeholder="Ej: 1, 2, 3 o Todos"></div>
+      <div><label>Piso Crítico</label><input type="text" id="piso_critico" placeholder="Ej: Piso 2 o Mezzanina"></div>
+    </div>
+
+    <div class="dmg-guide">
+      <div class="dmg-chip chip-I">I – Sin Daño</div>
+      <div class="dmg-chip chip-II">II – Leve</div>
+      <div class="dmg-chip chip-III">III – Moderado</div>
+      <div class="dmg-chip chip-IV">IV – Severo</div>
+      <div class="dmg-chip chip-V">V – Completo</div>
+    </div>
+
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="int-table" style="min-width:580px"
+      <thead>
+        <tr>
+          <th class="left" rowspan="2">Elemento Estructural</th>
+          <th colspan="5">Número de Elementos en el Piso Crítico</th>
+          <th rowspan="2">Total</th>
+          <th colspan="5" title="Porcentaje sobre el total de elementos. La suma de todas las columnas % debe ser 100%.">% sobre Total ∑=100%</th>
+        </tr>
+        <tr>
+          <th class="dmg-I">Sin Daño (I)</th>
+          <th class="dmg-II">Leve (II)</th>
+          <th class="dmg-III">Moderado (III)</th>
+          <th class="dmg-IV">Severo (IV)</th>
+          <th class="dmg-V">Completo (V)</th>
+          <th class="dmg-I">% I</th>
+          <th class="dmg-II">% II</th>
+          <th class="dmg-III">% III</th>
+          <th class="dmg-IV">% IV</th>
+          <th class="dmg-V">% V</th>
+        </tr>
+      </thead>
+      <tbody id="intTableBody">
+        <!-- rows generated by JS -->
+      </tbody>
+    </table></div>
+    <p style="font-size:11px;color:#888;margin-top:6px">Los porcentajes se calculan automáticamente. Ingrese el número de elementos por nivel de daño.</p>
+  </div>
+</div>
+
+<!-- REFERENCIA RÁPIDA DE DAÑOS -->
+<details class="quick-ref-box">
+  <summary>📐 Referencia Rápida – Niveles de Daño por Material</summary>
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ref-table-campo" style="margin-top:10px;min-width:520px">
+    <thead>
+      <tr>
+        <th>Elemento</th>
+        <th class="col-a">Sin Daño / Leve</th>
+        <th class="col-b">Moderado</th>
+        <th class="col-c">Severo / Completo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Columna, viga, losa, techo, unión – Concreto armado</strong></td>
+        <td>Grietas &lt; 1 mm</td>
+        <td>1 mm ≤ Grietas &lt; 2 mm</td>
+        <td>Grietas &gt; 2 mm · Caída de recubrimiento · Pandeo o fractura de barras · Desplazamiento residual</td>
+      </tr>
+      <tr>
+        <td><strong>Muro – Concreto armado</strong></td>
+        <td>Grietas &lt; 2 mm</td>
+        <td>2 mm ≤ Grietas &lt; 6 mm</td>
+        <td>Grietas &gt; 6 mm · Caída de recubrimiento · Pandeo o fractura de barras · Desplazamiento residual</td>
+      </tr>
+      <tr>
+        <td><strong>Paredes de relleno – Mampostería</strong></td>
+        <td>Grietas &lt; 1 mm</td>
+        <td>1–10 mm · Grietas diagonales · Desprendimiento en zonas</td>
+        <td>Derrumbe parcial o total de porciones de la pared</td>
+      </tr>
+      <tr>
+        <td><strong>Columna, viga, unión – Acero</strong></td>
+        <td>Pequeñas deformaciones, casi imperceptibles</td>
+        <td>Pandeo incipiente en vigas o columnas</td>
+        <td>Pandeo local · Fractura de sección · Fractura de soldadura o tornillos · Fractura de placa base</td>
+      </tr>
+    </tbody>
+  </table></div>
+</details>
+
+<!-- ===== SECCIÓN 9: DAÑOS EN ELEMENTOS ESTRUCTURALES ===== -->
+<div class="section" id="sectionDmgEst">
+  <div class="section-header">9. Daños en Elementos Estructurales</div>
+  <div class="section-body">
+    <p style="font-size:12px;color:#555;margin-bottom:10px">Coloque el mayor porcentaje de daños entre todos los elementos estructurales de la tabla anterior:</p>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="dmg-level-table" style="min-width:420px">
+      <thead>
+        <tr>
+          <th>Porcentaje de Daños</th>
+          <th class="col-a">a</th>
+          <th class="col-b">b</th>
+          <th class="col-c">c</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>% de daño Moderado (III)</strong></td>
+          <td class="col-a"><label class="radio-item"><input type="radio" name="dmg3" value="a" onchange="calcStructRisk()"> &lt; 30%</label></td>
+          <td class="col-b"><label class="radio-item"><input type="radio" name="dmg3" value="b" onchange="calcStructRisk()"> 30 – 60%</label></td>
+          <td class="col-c"><label class="radio-item"><input type="radio" name="dmg3" value="c" onchange="calcStructRisk()"> &gt; 60%</label></td>
+        </tr>
+        <tr>
+          <td><strong>% de daño Severo (IV)</strong></td>
+          <td class="col-a"><label class="radio-item"><input type="radio" name="dmg4" value="a" onchange="calcStructRisk()"> &lt; 10%</label></td>
+          <td class="col-b"><label class="radio-item"><input type="radio" name="dmg4" value="b" onchange="calcStructRisk()"> 10 – 30%</label></td>
+          <td class="col-c"><label class="radio-item"><input type="radio" name="dmg4" value="c" onchange="calcStructRisk()"> &gt; 30%</label></td>
+        </tr>
+        <tr>
+          <td><strong>% de daño Completo (V)</strong></td>
+          <td class="col-a"><label class="radio-item"><input type="radio" name="dmg5" value="a" onchange="calcStructRisk()"> &lt; 1%</label></td>
+          <td class="col-b"><label class="radio-item"><input type="radio" name="dmg5" value="b" onchange="calcStructRisk()"> 1 – 10%</label></td>
+          <td class="col-c"><label class="radio-item"><input type="radio" name="dmg5" value="c" onchange="calcStructRisk()"> &gt; 10%</label></td>
+        </tr>
+      </tbody>
+    </table></div>
+    <div style="margin-top:12px">
+      <strong style="font-size:12px">9.1 Nivel de Riesgo en la Estructura</strong>
+      <div id="structRiskDisplay" class="risk-badge risk-none">– Sin calificar –</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 10: ELEMENTOS NO ESTRUCTURALES ===== -->
+<div class="section" id="sectionNonStruct">
+  <div class="section-header">10. Daños en Elementos No Estructurales</div>
+  <div class="section-body">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="nonstruct-table" style="min-width:480px"
+      <thead>
+        <tr>
+          <th style="text-align:left;width:28%">Elementos</th>
+          <th style="width:24%">a</th>
+          <th style="width:28%">b</th>
+          <th style="width:20%">c</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Paredes / tabiquería</td>
+          <td><label class="ns-cell"><input type="radio" name="ns_paredes" value="a" onchange="calcNSRisk()"><span>Sin o poco daño</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_paredes" value="b" onchange="calcNSRisk()"><span>Grietas, separación</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_paredes" value="c" onchange="calcNSRisk()"><span>Peligro de caída</span></label></td>
+        </tr>
+        <tr>
+          <td>Escaleras</td>
+          <td><label class="ns-cell"><input type="radio" name="ns_escaleras" value="a" onchange="calcNSRisk()"><span>Sin o poco daño</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_escaleras" value="b" onchange="calcNSRisk()"><span>Grietas extendidas, separación</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_escaleras" value="c" onchange="calcNSRisk()"><span>Peligro de caída</span></label></td>
+        </tr>
+        <tr>
+          <td>Tanques / balcones</td>
+          <td><label class="ns-cell"><input type="radio" name="ns_tanques" value="a" onchange="calcNSRisk()"><span>Sin o poco daño</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_tanques" value="b" onchange="calcNSRisk()"><span>Deformación visible</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_tanques" value="c" onchange="calcNSRisk()"><span>Peligro de caída</span></label></td>
+        </tr>
+        <tr>
+          <td>Fachada / cielo raso / antenas / letreros / maquinaria / otros</td>
+          <td><label class="ns-cell"><input type="radio" name="ns_fachada" value="a" onchange="calcNSRisk()"><span>Sin o poco daño</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_fachada" value="b" onchange="calcNSRisk()"><span>Grietas, separación y/o deformación visible</span></label></td>
+          <td><label class="ns-cell"><input type="radio" name="ns_fachada" value="c" onchange="calcNSRisk()"><span>Peligro de caída</span></label></td>
+        </tr>
+      </tbody>
+    </table></div>
+    <div style="margin-top:12px">
+      <strong style="font-size:12px">10.1 Nivel de Riesgo en Elementos No Estructurales</strong>
+      <div id="nsRiskDisplay" class="risk-badge risk-none">– Sin calificar –</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 11: DECISIÓN FINAL ===== -->
+<div class="section">
+  <div class="section-header">11. Decisión Final</div>
+  <div class="section-body">
+    <p style="font-size:12px;color:#555;margin-bottom:4px">Se toma el nivel de riesgo más desfavorable entre los puntos 5.1, 9.1 y 10.1:</p>
+    <div class="decision-cards">
+      <div class="decision-card" id="cardA">
+        <div class="etiqueta">🟢</div>
+        <div class="titulo" style="color:var(--verde)">A – Acceso Permitido</div>
+        <div class="sub">Etiqueta Verde</div>
+        <div class="sub" style="margin-top:4px;font-size:10px">Edificación Inspeccionada</div>
+      </div>
+      <div class="decision-card" id="cardB">
+        <div class="etiqueta">🟡</div>
+        <div class="titulo" style="color:var(--amarillo)">B – Acceso Restringido</div>
+        <div class="sub">Etiqueta Amarilla</div>
+        <div class="sub" style="margin-top:4px;font-size:10px">Precaución al Entrar</div>
+      </div>
+      <div class="decision-card" id="cardC">
+        <div class="etiqueta">🔴</div>
+        <div class="titulo" style="color:var(--rojo)">C – Acceso No Permitido</div>
+        <div class="sub">Etiqueta Roja</div>
+        <div class="sub" style="margin-top:4px;font-size:10px">Edificación Insegura</div>
+      </div>
+    </div>
+    <div id="finalDecisionDisplay" class="alert alert-info" style="margin-top:12px">Complete las secciones 5, 9 y 10 para obtener la decisión automática.</div>
+
+    <hr class="sep">
+    <div class="prev-row">
+      <strong style="font-size:12px">11.1 Si hubo inspección previa, ¿cuál fue la etiqueta?</strong>
+      <label class="radio-item"><input type="radio" name="prev_etiqueta" value="Verde"> 🟢 Verde</label>
+      <label class="radio-item"><input type="radio" name="prev_etiqueta" value="Amarilla"> 🟡 Amarilla</label>
+      <label class="radio-item"><input type="radio" name="prev_etiqueta" value="Roja"> 🔴 Roja</label>
+      <label class="radio-item"><input type="radio" name="prev_etiqueta" value="ninguna"> Sin inspección previa</label>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 12: RECOMENDACIONES ===== -->
+<div class="section">
+  <div class="section-header">12. Recomendaciones</div>
+  <div class="section-body">
+    <div class="rec-group">
+      <div class="rec-label">Inspección Especializada:</div>
+      <div class="check-group">
+        <label class="check-item"><input type="checkbox" id="rec_estructura"> Estructura</label>
+        <label class="check-item"><input type="checkbox" id="rec_geotecnia"> Geotecnia</label>
+        <label class="check-item"><input type="checkbox" id="rec_servicios"> Servicios Públicos</label>
+      </div>
+    </div>
+    <div class="rec-group">
+      <div class="rec-label">Intervención de:</div>
+      <div class="check-group">
+        <label class="check-item"><input type="checkbox" id="rec_pc_bomberos"> PC o Bomberos</label>
+        <label class="check-item"><input type="checkbox" id="rec_policia"> Policía – Ejército</label>
+        <label class="check-item"><input type="checkbox" id="rec_autoridades"> Autoridades Municipales</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 13: MEDIDAS DE SEGURIDAD ===== -->
+<div class="section">
+  <div class="section-header">13. Medidas de Seguridad</div>
+  <div class="section-body">
+    <div class="check-group" style="margin-bottom:10px">
+      <label class="check-item"><input type="checkbox" id="ms_paso_peatonal"> Restringir paso peatonal</label>
+      <label class="check-item"><input type="checkbox" id="ms_agua"> Desconectar agua</label>
+      <label class="check-item"><input type="checkbox" id="ms_apuntalar"> Apuntalar</label>
+      <label class="check-item"><input type="checkbox" id="ms_trafico"> Restringir tráfico vehicular</label>
+      <label class="check-item"><input type="checkbox" id="ms_energia"> Desconectar energía</label>
+      <label class="check-item"><input type="checkbox" id="ms_demoler"> Demoler elementos a colapsar</label>
+      <label class="check-item"><input type="checkbox" id="ms_peligrosas"> Manejo de sustancias peligrosas</label>
+      <label class="check-item"><input type="checkbox" id="ms_gas"> Desconectar gas</label>
+      <label class="check-item"><input type="checkbox" id="ms_evacuar"> Evaluar o evacuar edificio vecino</label>
+    </div>
+    <label>Indique lugares del edificio para aplicar medidas:</label>
+    <input type="text" id="ms_lugares" placeholder="Ej: Planta baja, módulo central, fachada norte...">
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 14: OBSERVACIONES Y FOTOGRAFÍAS ===== -->
+<div class="section">
+  <div class="section-header">14. Observaciones y Fotografías</div>
+  <div class="section-body">
+    <div class="grid-2" style="margin-bottom:10px">
+      <div></div>
+      <div><label>Hora de Culminación</label><input type="time" id="hora_fin"></div>
+    </div>
+    <textarea id="observaciones" placeholder="Escriba aquí sus observaciones, notas adicionales o explicaciones..." rows="4"></textarea>
+
+    <hr class="sep">
+
+    <!-- Reference list (collapsible) -->
+    <details style="margin-bottom:14px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--azul);padding:4px 0">📋 Lista de referencia de fotos recomendadas</summary>
+      <div class="photo-list" style="margin-top:8px">
+        <ul>
+          <li>Identificación de la edificación</li>
+          <li>Fachadas</li>
+          <li>Pendiente del terreno</li>
+          <li>Talud cercano</li>
+          <li>Tipo estructural</li>
+          <li>Deslizamiento o derrumbes</li>
+          <li>Asentamiento(s) diferencial(es)</li>
+          <li>Grietas en fachada</li>
+          <li>Grietas en terreno</li>
+          <li><strong>Detalles del Piso Crítico:</strong> Vigas · Columnas · Losas · Juntas · Nodos o conexiones</li>
+          <li>Daños en elementos no estructurales</li>
+          <li>Pandeo y deformaciones en elementos de acero</li>
+          <li>Estado de servicios públicos</li>
+        </ul>
+      </div>
+    </details>
+
+    <!-- Add photo bar -->
+    <div class="photo-add-bar">
+      <button class="btn-photo" onclick="triggerPhotoCapture('camera')">📷 Tomar Foto</button>
+      <button class="btn-photo btn-photo-alt" onclick="triggerPhotoCapture('file')">🗂 Adjuntar Archivo</button>
+      <div class="geo-status" id="geoStatus">📍 Obteniendo ubicación...</div>
+    </div>
+
+    <!-- Hidden file input — cloned on each use for reliable mobile support -->
+    <input type="file" id="photoFileInput" accept="image/*" style="display:none">
+
+    <!-- Photo grid -->
+    <div id="photoGrid" class="photo-grid">
+      <div class="photo-empty" id="photoEmpty">📷 Aún no hay fotos adjuntas. Use los botones de arriba para agregar.</div>
+    </div>
+    <div id="photoCount" style="font-size:13px;font-weight:600;padding:7px 12px;border-radius:7px;margin-top:8px;min-height:0;transition:background 0.3s;"></div>
+    <div id="photoStatus" style="font-size:13px;font-weight:600;padding:7px 12px;border-radius:7px;margin-top:4px;min-height:0;transition:background 0.3s;"></div>
+  </div>
+</div>
+
+<!-- ===== PHOTO TITLE MODAL ===== -->
+<div class="modal-overlay" id="photoModal">
+  <div class="modal-box">
+    <h3>📷 Agregar Fotografía</h3>
+    <img id="modalThumb" class="photo-preview-thumb" src="" alt="preview">
+    <label>Categoría</label>
+    <select id="photoCategory" onchange="toggleCustomTitle()">
+      <option value="">— Seleccione una categoría —</option>
+      <option>Identificación de la edificación</option>
+      <option>Fachadas</option>
+      <option>Pendiente del terreno</option>
+      <option>Talud cercano</option>
+      <option>Tipo estructural</option>
+      <option>Deslizamiento o derrumbes</option>
+      <option>Asentamiento(s) diferencial(es)</option>
+      <option>Grietas en fachada</option>
+      <option>Grietas en terreno</option>
+      <option>Piso Crítico – Vigas</option>
+      <option>Piso Crítico – Columnas</option>
+      <option>Piso Crítico – Losas</option>
+      <option>Piso Crítico – Juntas</option>
+      <option>Piso Crítico – Nodos o conexiones</option>
+      <option>Daños en elementos no estructurales</option>
+      <option>Pandeo y deformaciones en acero</option>
+      <option>Estado de servicios públicos</option>
+      <option value="__otro__">Otro (escribir título)</option>
+    </select>
+    <div id="customTitleWrap" style="display:none">
+      <label>Título personalizado</label>
+      <input type="text" id="customTitle" placeholder="Escriba el título de la foto">
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:#6b7280" id="modalGeoInfo">📍 Ubicación: obteniendo...</div>
+    <div style="font-size:11px;color:#6b7280" id="modalTimeInfo">🕒 Hora: –</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="cancelPhoto()">Cancelar</button>
+      <button class="btn btn-green" onclick="confirmPhoto()">✔ Guardar Foto</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<!-- Botones fijos -->
+<div class="btn-bar">
+  <button class="btn btn-secondary" onclick="showView('index')">← Volver al Índice</button>
+  <button class="btn btn-secondary" onclick="resetForm()">🔄 Limpiar Formulario</button>
+  <button class="btn btn-save" onclick="saveDraft()">💾 Borrador</button>
+  <button class="btn btn-final" onclick="saveFinal()">✔ Guardar Final</button>
+  <button class="btn btn-primary" onclick="generatePDF()">📄 Generar PDF</button>
+</div>
+<div class="autosave-bar" id="autosaveBar"></div>
+
+</div><!-- end view-form -->
+
+<script>
+// ============================================================
+// ESTADO DE SESIÓN (declarado primero, se usa en toda la app)
+// ============================================================
+let currentUser = null; // {id, email, nombre} del inspector logueado
+
+// ============================================================
+// CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById('canvasCroquis');
+const ctx = canvas.getContext('2d');
+let drawing = false, tool = 'pen', lastX = 0, lastY = 0;
+
+function setTool(t) {
+  tool = t;
+  document.getElementById('btnPen').style.fontWeight = t === 'pen' ? 'bold' : 'normal';
+  document.getElementById('btnEraser').style.fontWeight = t === 'eraser' ? 'bold' : 'normal';
+}
+function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / r.width;
+  const scaleY = canvas.height / r.height;
+  if (e.touches) return { x: (e.touches[0].clientX - r.left) * scaleX, y: (e.touches[0].clientY - r.top) * scaleY };
+  return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY };
+}
+
+canvas.addEventListener('mousedown', e => { drawing = true; const p = getPos(e); lastX = p.x; lastY = p.y; });
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('mouseleave', () => drawing = false);
+canvas.addEventListener('mousemove', draw);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e); lastX = p.x; lastY = p.y; });
+canvas.addEventListener('touchend', () => drawing = false);
+canvas.addEventListener('touchmove', e => { e.preventDefault(); draw(e); });
+
+function draw(e) {
+  if (!drawing) return;
+  const p = getPos(e);
+  ctx.beginPath();
+  ctx.moveTo(lastX, lastY);
+  ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : document.getElementById('penColor').value;
+  ctx.lineWidth = tool === 'eraser' ? 20 : parseInt(document.getElementById('penSize').value);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  lastX = p.x; lastY = p.y;
+}
+
+// ============================================================
+// INTERNAL TABLE ROWS
+// ============================================================
+const elementos = ['Columna', 'Viga', 'Muro', 'Nodo / conexión', 'Losa', 'Mampostería'];
+const tbody = document.getElementById('intTableBody');
+
+elementos.forEach((el, i) => {
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td class="el-label">${el}</td>
+    <td class="dmg-I"><input type="number" min="0" id="el${i}_1" oninput="calcRow(${i})" placeholder="0"></td>
+    <td class="dmg-II"><input type="number" min="0" id="el${i}_2" oninput="calcRow(${i})" placeholder="0"></td>
+    <td class="dmg-III"><input type="number" min="0" id="el${i}_3" oninput="calcRow(${i})" placeholder="0"></td>
+    <td class="dmg-IV"><input type="number" min="0" id="el${i}_4" oninput="calcRow(${i})" placeholder="0"></td>
+    <td class="dmg-V"><input type="number" min="0" id="el${i}_5" oninput="calcRow(${i})" placeholder="0"></td>
+    <td class="pct" id="el${i}_total">0</td>
+    <td class="pct dmg-I" id="el${i}_pct1">–</td>
+    <td class="pct dmg-II" id="el${i}_pct2">–</td>
+    <td class="pct dmg-III" id="el${i}_pct3">–</td>
+    <td class="pct dmg-IV" id="el${i}_pct4">–</td>
+    <td class="pct dmg-V" id="el${i}_pct5">–</td>
+  `;
+  tbody.appendChild(row);
+});
+
+function calcRow(i) {
+  const vals = [1,2,3,4,5].map(j => parseInt(document.getElementById(`el${i}_${j}`)?.value || 0) || 0);
+  const total = vals.reduce((a,b) => a+b, 0);
+  document.getElementById(`el${i}_total`).textContent = total;
+  [1,2,3,4,5].forEach(dmg => {
+    const d = document.getElementById(`el${i}_pct${dmg}`);
+    if (d) d.textContent = total > 0 ? (vals[dmg-1]/total*100).toFixed(1) + '%' : '–';
+  });
+  autoSelectDamage(i);
+}
+
+function autoSelectDamage(i) {
+  // Optionally auto-suggest the dmg3/4/5 radio based on max pct across rows
+  // Find max % across all elements for each damage level
+  let maxPct3=0, maxPct4=0, maxPct5=0;
+  elementos.forEach((_, ri) => {
+    const vals = [1,2,3,4,5].map(j => parseInt(document.getElementById(`el${ri}_${j}`)?.value || 0) || 0);
+    const total = vals.reduce((a,b)=>a+b,0);
+    if (total > 0) {
+      maxPct3 = Math.max(maxPct3, vals[2]/total*100);
+      maxPct4 = Math.max(maxPct4, vals[3]/total*100);
+      maxPct5 = Math.max(maxPct5, vals[4]/total*100);
+    }
+  });
+  // Auto-set radio buttons for section 9
+  setRadioAuto('dmg3', maxPct3, [30, 60]);
+  setRadioAuto('dmg4', maxPct4, [10, 30]);
+  setRadioAuto('dmg5', maxPct5, [1, 10]);
+  calcStructRisk();
+}
+
+function setRadioAuto(name, val, [t1, t2]) {
+  const cat = val < t1 ? 'a' : val <= t2 ? 'b' : 'c';
+  const radios = document.querySelectorAll(`input[name="${name}"]`);
+  radios.forEach(r => { r.checked = r.value === cat; });
+}
+
+// ============================================================
+// RISK CALCULATIONS
+// ============================================================
+function getRadio(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : null;
+}
+
+function riskClass(r) {
+  if (r === 'A') return 'risk-a';
+  if (r === 'B') return 'risk-b';
+  if (r === 'C') return 'risk-c';
+  return 'risk-none';
+}
+function riskText(r) {
+  if (r === 'A') return '✅ A – Riesgo Bajo';
+  if (r === 'B') return '⚠️ B – Riesgo Medio';
+  if (r === 'C') return '🔴 C – Riesgo Alto';
+  return '– Sin calificar –';
+}
+
+function calcExtRisk() {
+  const fields = ['colapso','aledanos','geologica','asentamiento','inclinacion'];
+  const vals = fields.map(f => getRadio(f));
+  if (vals.some(v => v === null)) { setRisk('extRiskDisplay', null); return; }
+  const cCount = vals.filter(v => v === 'c').length;
+  const bCount = vals.filter(v => v === 'b').length;
+  const risk = cCount >= 1 ? 'C' : bCount >= 1 ? 'B' : 'A';
+  setRisk('extRiskDisplay', risk);
+  const alertEl = document.getElementById('extRiskAlert');
+  if (risk === 'C') {
+    alertEl.style.display = 'block';
+    alertEl.className = 'alert alert-danger';
+    alertEl.innerHTML = '🔴 <strong>Riesgo Externo C (Alto).</strong> No continúe con la inspección interna. Pase directamente a la Sección 11 y coloque la Etiqueta Roja.';
+  } else {
+    alertEl.style.display = 'none';
+  }
+  calcFinalDecision();
+}
+
+function calcStructRisk() {
+  const d3 = getRadio('dmg3'), d4 = getRadio('dmg4'), d5 = getRadio('dmg5');
+  if (!d3 || !d4 || !d5) { setRisk('structRiskDisplay', null); return; }
+  const bCount = [d3,d4,d5].filter(v => v === 'b').length;
+  const cCount = [d3,d4,d5].filter(v => v === 'c').length;
+  const risk = (bCount >= 2 || cCount >= 1) ? 'C' : (bCount === 1 && cCount === 0) ? 'B' : 'A';
+  setRisk('structRiskDisplay', risk);
+  calcFinalDecision();
+}
+
+function calcNSRisk() {
+  const fields = ['ns_paredes','ns_escaleras','ns_tanques','ns_fachada'];
+  const vals = fields.map(f => getRadio(f));
+  if (vals.some(v => v === null)) { setRisk('nsRiskDisplay', null); return; }
+  const cCount = vals.filter(v => v === 'c').length;
+  const bCount = vals.filter(v => v === 'b').length;
+  const risk = cCount >= 1 ? 'C' : bCount >= 3 ? 'B' : 'A';
+  setRisk('nsRiskDisplay', risk);
+  calcFinalDecision();
+}
+
+function setRisk(elId, risk) {
+  const el = document.getElementById(elId);
+  el.className = 'risk-badge ' + riskClass(risk);
+  el.textContent = riskText(risk);
+}
+
+function calcFinalDecision() {
+  const extEl = document.getElementById('extRiskDisplay');
+  const structEl = document.getElementById('structRiskDisplay');
+  const nsEl = document.getElementById('nsRiskDisplay');
+  const risks = [extEl, structEl, nsEl].map(e => {
+    if (e.classList.contains('risk-a')) return 'A';
+    if (e.classList.contains('risk-b')) return 'B';
+    if (e.classList.contains('risk-c')) return 'C';
+    return null;
+  });
+
+  const validRisks = risks.filter(r => r !== null);
+  if (validRisks.length === 0) return;
+
+  const final = validRisks.includes('C') ? 'C' : validRisks.includes('B') ? 'B' : 'A';
+  const display = document.getElementById('finalDecisionDisplay');
+  const cards = ['cardA','cardB','cardC'];
+  cards.forEach(c => { document.getElementById(c).className = 'decision-card'; });
+
+  if (final === 'A') {
+    document.getElementById('cardA').className = 'decision-card active-verde';
+    display.className = 'alert alert-success';
+    display.innerHTML = '🟢 <strong>Decisión Final: A – Acceso Permitido.</strong> La edificación ha sido inspeccionada y se coloca la Etiqueta Verde.';
+  } else if (final === 'B') {
+    document.getElementById('cardB').className = 'decision-card active-amarillo';
+    display.className = 'alert alert-warn';
+    display.innerHTML = '🟡 <strong>Decisión Final: B – Acceso Restringido.</strong> Precaución al entrar. Se coloca la Etiqueta Amarilla.';
+  } else {
+    document.getElementById('cardC').className = 'decision-card active-rojo';
+    display.className = 'alert alert-danger';
+    display.innerHTML = '🔴 <strong>Decisión Final: C – Acceso No Permitido.</strong> Edificación insegura. Se coloca la Etiqueta Roja.';
+  }
+}
+
+function updateUso() {
+  const otros = document.querySelector('#usoGroup input[value="Otros"]');
+  document.getElementById('usoEspecifique').style.display = otros && otros.checked ? 'block' : 'none';
+}
+
+function toggleInternal() {
+  const val = getRadio('inspeccion_interna');
+  document.getElementById('internalNote').style.display = val ? 'block' : 'none';
+}
+
+// ============================================================
+// PHOTO MODULE
+// ============================================================
+let photos = [];           // [{dataUrl, title, lat, lng, timestamp}]
+let pendingPhotoData = null; // dataUrl waiting for the modal
+let currentGeo = null;     // {lat, lng} from last geolocation fix
+
+// Start watching geolocation immediately
+(function initGeo() {
+  const statusEl = document.getElementById('geoStatus');
+  if (!navigator.geolocation) {
+    statusEl.textContent = '📍 Geolocalización no disponible en este dispositivo';
+    statusEl.className = 'geo-status err';
+    return;
+  }
+  function onSuccess(pos) {
+    currentGeo = { lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) };
+    statusEl.textContent = `📍 ${currentGeo.lat}, ${currentGeo.lng}`;
+    statusEl.className = 'geo-status ok';
+  }
+  function onError() {
+    statusEl.textContent = '📍 Ubicación no disponible (active el GPS)';
+    statusEl.className = 'geo-status err';
+  }
+  navigator.geolocation.getCurrentPosition(onSuccess, onError, { enableHighAccuracy: true });
+  navigator.geolocation.watchPosition(onSuccess, onError, { enableHighAccuracy: true });
+})();
+
+function triggerPhotoCapture(mode) {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      currentGeo = { lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) };
+    }, () => {});
+  }
+  // Clone the static input to guarantee a clean state (no stale listeners)
+  const old = document.getElementById('photoFileInput');
+  const fresh = old.cloneNode(false);
+  fresh.id = 'photoFileInput';
+  fresh.value = '';
+  if (mode === 'camera') {
+    fresh.setAttribute('capture', 'environment');
+    fresh.removeAttribute('multiple');
+  } else {
+    fresh.removeAttribute('capture');
+    fresh.multiple = true;
+  }
+  // Use onchange (not addEventListener) — guarantees exactly one handler
+  fresh.onchange = function() { handlePhotoSelected(this); };
+  old.parentNode.replaceChild(fresh, old);
+  fresh.click();
+}
+
+function handlePhotoSelected(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  if (files.length === 1) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      compressImage(e.target.result, compressed => {
+        pendingPhotoData = compressed;
+        openPhotoModal();
+      });
+    };
+    reader.readAsDataURL(files[0]);
+  } else {
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        compressImage(e.target.result, compressed => {
+          const now = new Date();
+          const ts = now.toLocaleString('es-VE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+          photos.push({
+            dataUrl: compressed,
+            title: 'Sin categoría',
+            lat: currentGeo ? currentGeo.lat : '-',
+            lng: currentGeo ? currentGeo.lng : '-',
+            timestamp: ts
+          });
+          renderPhotoGrid();
+          showPhotoToast('✅ ' + photos.length + ' foto' + (photos.length !== 1 ? 's' : '') + ' agregada' + (photos.length !== 1 ? 's' : ''));
+          scrollToPhotoGrid();
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
+function openPhotoModal() {
+  const now = new Date();
+  const ts = now.toLocaleString('es-VE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  document.getElementById('modalThumb').src = pendingPhotoData;
+  document.getElementById('photoCategory').value = '';
+  document.getElementById('customTitle').value = '';
+  document.getElementById('customTitleWrap').style.display = 'none';
+  document.getElementById('modalGeoInfo').textContent = currentGeo
+    ? `📍 Lat: ${currentGeo.lat}  |  Lng: ${currentGeo.lng}`
+    : '📍 Ubicación no disponible';
+  document.getElementById('modalTimeInfo').textContent = `🕒 ${ts}`;
+  document._pendingTimestamp = ts;
+  document.getElementById('photoModal').classList.add('open');
+}
+
+function toggleCustomTitle() {
+  const val = document.getElementById('photoCategory').value;
+  document.getElementById('customTitleWrap').style.display = val === '__otro__' ? 'block' : 'none';
+}
+
+function cancelPhoto() {
+  pendingPhotoData = null;
+  document.getElementById('photoModal').classList.remove('open');
+}
+
+function confirmPhoto() {
+  const cat = document.getElementById('photoCategory').value;
+  let title = cat === '__otro__' ? document.getElementById('customTitle').value.trim() : cat;
+  if (!title) title = 'Sin título';
+  const photo = {
+    dataUrl: pendingPhotoData,
+    title,
+    lat: currentGeo ? currentGeo.lat : '-',
+    lng: currentGeo ? currentGeo.lng : '-',
+    timestamp: document._pendingTimestamp
+  };
+  photos.push(photo);
+  renderPhotoGrid();
+  pendingPhotoData = null;
+  document.getElementById('photoModal').classList.remove('open');
+  // Toast: foto guardada
+  showPhotoToast('✅ Foto guardada (' + photos.length + ' en total)');
+  // Hacer scroll al grid de fotos para que el inspector vea la confirmación visual
+  scrollToPhotoGrid();
+}
+
+// Hace scroll suave hacia la zona de fotos, para que el inspector vea el resultado
+// después de agregar/eliminar una foto (la sección 14 puede estar lejos del modal).
+function scrollToPhotoGrid() {
+  const grid = document.getElementById('photoGrid');
+  if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function showPhotoToast(msg, type) {
+  const el = document.getElementById('photoStatus');
+  if (!el) return;
+  const isGood = type !== 'del';
+  el.textContent = msg;
+  el.style.background = isGood ? '#dcfce7' : '#fee2e2';
+  el.style.color = isGood ? '#166534' : '#991b1b';
+  el.style.border = isGood ? '1px solid #bbf7d0' : '1px solid #fecaca';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => {
+    el.textContent = '';
+    el.style.background = '';
+    el.style.border = '';
+  }, 3000);
+}
+
+function renderPhotoGrid() {
+  const grid = document.getElementById('photoGrid');
+  const count = document.getElementById('photoCount');
+
+  if (photos.length === 0) {
+    grid.innerHTML = '<div class="photo-empty" id="photoEmpty">📷 Aún no hay fotos adjuntas. Use los botones de arriba para agregar.</div>';
+    count.textContent = '';
+    count.style.background = '';
+    count.style.border = '';
+    return;
+  }
+
+  // Rebuild grid (el mensaje "vacío" se reconstruye como HTML, no se mueve un nodo existente,
+  // ya que grid.innerHTML = '' destruiría cualquier referencia guardada a ese nodo)
+  grid.innerHTML = '';
+  photos.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'photo-card';
+    card.innerHTML = `
+      <img src="${p.dataUrl}" alt="${p.title}">
+      <div class="photo-card-body">
+        <div class="photo-card-title" title="${p.title}">${i+1}. ${p.title}</div>
+        <div class="photo-meta">
+          <span>🕒 ${p.timestamp}</span>
+          <span>📍 ${p.lat}, ${p.lng}</span>
+        </div>
+      </div>
+      <button class="photo-card-del" onclick="deletePhoto(${i})">🗑 Eliminar</button>
+    `;
+    grid.appendChild(card);
+  });
+  const n = photos.length;
+  count.textContent = n + ' foto' + (n !== 1 ? 's' : '') + ' adjunta' + (n !== 1 ? 's' : '');
+  count.style.background = '#f0fdf4';
+  count.style.color = '#166534';
+  count.style.border = '1px solid #bbf7d0';
+}
+
+function deletePhoto(i) {
+  photos.splice(i, 1);
+  renderPhotoGrid();
+  showPhotoToast('🗑 Foto eliminada — quedan ' + photos.length, 'del');
+}
+
+// ============================================================
+// RESET FORM
+// ============================================================
+async function resetForm() {
+  if (!await customConfirm('¿Desea limpiar todos los campos del formulario?')) return;
+  document.querySelectorAll('input[type=text], input[type=date], input[type=time], input[type=number], textarea').forEach(i => i.value = '');
+  document.querySelectorAll('input[type=checkbox]').forEach(i => i.checked = false);
+  document.querySelectorAll('input[type=radio]').forEach(i => i.checked = false);
+  clearCanvas();
+  photos = [];
+  renderPhotoGrid();
+  ['extRiskDisplay','structRiskDisplay','nsRiskDisplay'].forEach(id => setRisk(id, null));
+  ['cardA','cardB','cardC'].forEach(c => document.getElementById(c).className = 'decision-card');
+  document.getElementById('finalDecisionDisplay').className = 'alert alert-info';
+  document.getElementById('finalDecisionDisplay').textContent = 'Complete las secciones 5, 9 y 10 para obtener la decisión automática.';
+  document.getElementById('extRiskAlert').style.display = 'none';
+  elementos.forEach((_, i) => calcRow(i));
+}
+
+// ============================================================
+// PDF GENERATION
+// ============================================================
+function v(id) { return (document.getElementById(id)?.value || '').trim(); }
+function cb(id) { return document.getElementById(id)?.checked ? '☑' : '☐'; }
+function rad(name) { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ''; }
+function radLabel(name) { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.parentElement.textContent.trim() : '–'; }
+function riskLetter(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return '–';
+  if (el.classList.contains('risk-a')) return 'A';
+  if (el.classList.contains('risk-b')) return 'B';
+  if (el.classList.contains('risk-c')) return 'C';
+  return '–';
+}
+function checkedUsos() {
+  const boxes = document.querySelectorAll('#usoGroup input[type=checkbox]:checked');
+  return Array.from(boxes).map(b => b.value).join(', ') || '–';
+}
+
+function generatePDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const PW = 215.9, PH = 279.4;
+  const ML = 12, MR = 12, MT = 12;
+  let Y = MT;
+  const CW = PW - ML - MR;
+  // PDF-safe checkbox (Helvetica does not support Unicode U+2610/U+2611)
+  const cb = id => document.getElementById(id)?.checked ? '[X]' : '[ ]';
+
+  // ---- helpers ----
+  function hline(y, lw) { doc.setLineWidth(lw || 0.3); doc.line(ML, y, ML+CW, y); }
+  function vline(x, y1, y2) { doc.setLineWidth(0.3); doc.line(x, y1, x, y2); }
+  function rect(x, y, w, h, fill) {
+    if (fill) { doc.setFillColor(...fill); doc.rect(x,y,w,h,'F'); }
+    doc.setLineWidth(0.3); doc.rect(x,y,w,h,'S');
+  }
+  function cell(x, y, w, h, text, opts = {}) {
+    const { fill, bold, size, align, color, wrap } = opts;
+    if (fill) { doc.setFillColor(...fill); doc.rect(x, y, w, h, 'F'); }
+    doc.setLineWidth(0.3); doc.rect(x, y, w, h, 'S');
+    doc.setFontSize(size || 8);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setTextColor(...(color || [0,0,0]));
+    const pad = 1.5;
+    if (wrap) {
+      const lines = doc.splitTextToSize(text, w - pad*2);
+      lines.forEach((line, li) => doc.text(line, x + (align === 'C' ? w/2 : pad), y + 3.5 + li*3.5, { align: align === 'C' ? 'center' : 'left' }));
+    } else {
+      const tx = align === 'C' ? x + w/2 : x + pad;
+      doc.text(text, tx, y + h/2 + 1, { align: align === 'C' ? 'center' : 'left', baseline: 'middle' });
+    }
+  }
+  function sectionHeader(y, title) {
+    doc.setFillColor(30, 58, 95);
+    doc.rect(ML, y, CW, 6, 'F');
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(255,255,255);
+    doc.text(title, ML + 2, y + 4);
+    return y + 6;
+  }
+  function checkMark(checked) { return checked ? '[X]' : '[ ]'; }
+
+  // ===== PAGE 1 =====
+  // Header
+  doc.setFillColor(30, 58, 95);
+  doc.rect(ML, Y, CW, 9, 'F');
+  doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(255,255,255);
+  doc.text('Instrumento para Inspección de Edificaciones Afectadas por Sismos', ML+CW/2, Y+5.5, { align:'center' });
+  doc.setFontSize(7); doc.setFont('helvetica','normal');
+  doc.text('Gobierno Bolivariano de Venezuela · FUNVISIS', ML+CW/2, Y+8, { align:'center' });
+  Y += 11;
+
+  // Section 1: Inspectores
+  Y = sectionHeader(Y, '1. DATOS DE LOS INSPECTORES');
+  const inspCols = [['Función',18],['Nombre y Apellido',46],['Cédula',26],['Profesión',32],['Teléfono',28],['Correo Electrónico',42]];
+  let ix = ML;
+  inspCols.forEach(([h, w]) => { cell(ix, Y, w, 5.5, h, { fill:[220,228,236], bold:true, size:7, align:'C' }); ix += w; });
+  Y += 5.5;
+  const insp = [
+    ['Inspector', v('insp1_nombre'), v('insp1_cedula'), v('insp1_profesion'), v('insp1_telefono'), v('insp1_correo')],
+    ['Inspector', v('insp2_nombre'), v('insp2_cedula'), v('insp2_profesion'), v('insp2_telefono'), v('insp2_correo')],
+    ['Supervisor', v('sup_nombre'), v('sup_cedula'), v('sup_profesion'), v('sup_telefono'), v('sup_correo')],
+  ];
+  insp.forEach(row => {
+    ix = ML;
+    row.forEach((val, ci) => {
+      const w = inspCols[ci][1];
+      cell(ix, Y, w, 5.5, val, { fill: ci===0?[220,228,236]:null, bold: ci===0, size:7 });
+      ix += w;
+    });
+    Y += 5.5;
+  });
+
+  // Section 2: Datos Generales
+  Y = sectionHeader(Y, '2. DATOS GENERALES');
+  // Row 1: Nombre + hora
+  cell(ML, Y, 140, 5.5, `Nombre: ${v('nombre_edif')}`, { size:7 });
+  cell(ML+140, Y, CW-140, 5.5, `Hora Inicio: ${v('hora_inicio')}`, { size:7 });
+  Y += 5.5;
+  // Row 2
+  cell(ML, Y, 35, 5.5, `Fecha: ${v('fecha')}`, { size:7 });
+  cell(ML+35, Y, 30, 5.5, `Nº Pisos: ${v('n_pisos')}`, { size:7 });
+  cell(ML+65, Y, 35, 5.5, `Nº Semisótanos: ${v('n_semisotanos')}`, { size:7 });
+  cell(ML+100, Y, CW-100, 5.5, `Nº Sótanos: ${v('n_sotanos')}`, { size:7 });
+  Y += 5.5;
+  // Row 3
+  cell(ML, Y, 48, 5.5, `Estado: ${v('estado')}`, { size:7 });
+  cell(ML+48, Y, 43, 5.5, `Ciudad: ${v('ciudad')}`, { size:7 });
+  cell(ML+91, Y, 43, 5.5, `Municipio: ${v('municipio')}`, { size:7 });
+  cell(ML+134, Y, CW-134, 5.5, `Parroquia: ${v('parroquia')}`, { size:7 });
+  Y += 5.5;
+  // Row 4
+  cell(ML, Y, 55, 5.5, `Urb: ${v('urb')}`, { size:7 });
+  cell(ML+55, Y, 55, 5.5, `Sector: ${v('sector')}`, { size:7 });
+  cell(ML+110, Y, CW-110, 5.5, `Ave/Calle: ${v('calle')}`, { size:7 });
+  Y += 5.5;
+  // Row 5: coords
+  cell(ML, Y, 60, 5.5, `Coord UTM X: ${v('coord_x')}`, { size:7 });
+  cell(ML+60, Y, 60, 5.5, `Coord Y: ${v('coord_y')}`, { size:7 });
+  cell(ML+120, Y, CW-120, 5.5, `Huso: ${v('huso')}`, { size:7 });
+  Y += 5.5;
+
+  // Section 3: Uso
+  Y = sectionHeader(Y, '3. USO DE LA EDIFICACIÓN');
+  const usos = [
+    ['Gubernamental', 'Gubernamental'], ['Militar','Militar'], ['Médico-Asistencial','Médico-Asistencial'],
+    ['Industrial','Industrial'], ['Otros','Otros'], ['Bomberos','Bomberos'],
+    ['Vivienda Popular','Vivienda Popular'], ['Educativo','Educativo'], ['Comercial','Comercial'],
+    ['Protección Civil','Protección Civil'], ['Vivienda Unifamiliar','Vivienda Unifamiliar'], ['Deportivo-Recreativo','Deportivo-Recreativo'],
+    ['Oficina','Oficina'], ['Policial','Policial'], ['Vivienda Multifamiliar','Vivienda Multifamiliar'],
+    ['Cultural','Cultural'], ['Religioso','Religioso']
+  ];
+  const usoW = CW / 5;
+  let uix = ML; let uy = Y;
+  const usosPerRow = 5;
+  usos.forEach((u, ui) => {
+    const checked = !!document.querySelector(`#usoGroup input[value="${u[0]}"]:checked`);
+    const txt = `${checked ? '[X]' : '[ ]'} ${u[1]}`;
+    cell(uix, uy, usoW, 5, txt, { size:7 });
+    uix += usoW;
+    if ((ui+1) % usosPerRow === 0) { uix = ML; uy += 5; }
+  });
+  Y = uy + (usos.length % usosPerRow !== 0 ? 5 : 0);
+
+  // Section 4: Tipo Estructural
+  Y = sectionHeader(Y, '4. TIPO ESTRUCTURAL');
+  const colW4 = CW/4;
+  ['CONCRETO ARMADO','ACERO','MAMPOSTERÍA','OTROS'].forEach((h, i) => {
+    cell(ML + i*colW4, Y, colW4, 5.5, h, { fill:[220,228,236], bold:true, size:7, align:'C' });
+  });
+  Y += 5.5;
+  const tcaItems = [
+    [`${cb('te_porticos_ca')} Pórticos`, `${cb('te_porticos_arriostrados')} Pórticos arriostrados`, `${cb('te_confinada')} Confinada`, `${cb('te_precaria')} Constr. precaria`],
+    [`${cb('te_muros_ca')} Muros`, `${cb('te_porticos_no_arriostrados')} Pórticos no arriostrados`, `${cb('te_no_confinada')} No confinada`, `${cb('te_bahareque')} Bahareque`],
+    [`${cb('te_prefabricados')} Prefabricados`, 'Conexiones:', `${cb('te_mixta_porticos')} Sistemas mixtos`, `${cb('te_otros_struct')} Otros: ${v('te_otros_texto')}`],
+    ['', `${cb('te_apernadas')} Apernadas`, '', ''],
+    ['', `${cb('te_soldadas')} Soldadas`, '', ''],
+    ['', `${cb('te_mixtas_acero')} Mixtas`, '', ''],
+  ];
+  tcaItems.forEach(row => {
+    row.forEach((txt, i) => {
+      cell(ML + i*colW4, Y, colW4, 5.5, txt, { size:6.5 });
+    });
+    Y += 5.5;
+  });
+
+  // Section 5: External inspection
+  Y = sectionHeader(Y, '5. INSPECCIÓN EXTERNA SIN ACCESAR A LA EDIFICACIÓN');
+  const extH = ['Clasificación','a','b','c'];
+  const extW = [55, (CW-55)/3, (CW-55)/3, (CW-55)/3];
+  let ex = ML;
+  extH.forEach((h, i) => {
+    const fill = i===0?[220,228,236]:i===1?[220,252,231]:i===2?[254,249,195]:[254,226,226];
+    cell(ex, Y, extW[i], 5.5, h, { fill, bold:true, size:7, align:'C' }); ex += extW[i];
+  });
+  Y += 5.5;
+
+  const extRows = [
+    ['Colapso de la estructura', 'No','Parcial','Total','colapso'],
+    ['Riesgo de edificios aledaños','No','Moderado','Elevado','aledanos'],
+    ['Amenaza geológica','No','Moderada','Elevada','geologica'],
+    ['Asentamiento del edificio','< 0,2 m','0,2 m - 1 m','> 1 m','asentamiento'],
+    ['Inclinacion del edificio','< 1 cm/60 cm','1 cm/60 cm - 2 cm/60 cm','> 2 cm/60 cm','inclinacion'],
+  ];
+  extRows.forEach(([label, a, b, c, name]) => {
+    const sel = rad(name);
+    ex = ML;
+    cell(ex, Y, extW[0], 5.5, label, { size:7 }); ex += extW[0];
+    [[a,'a'],[b,'b'],[c,'c']].forEach(([txt, val], i) => {
+      const fills = [[220,252,231],[254,249,195],[254,226,226]];
+      const mark = sel === val ? '[X] '+txt : '[ ] '+txt;
+      cell(ex, Y, extW[i+1], 5.5, mark, { fill: sel===val?fills[i]:null, size:7, align:'C' });
+      ex += extW[i+1];
+    });
+    Y += 5.5;
+  });
+
+  // 5.1 Risk
+  const extRisk = riskLetter('extRiskDisplay');
+  const extRiskFill = extRisk==='A'?[220,252,231]:extRisk==='B'?[254,249,195]:extRisk==='C'?[254,226,226]:[243,244,246];
+  const chk = (v) => v ? '[X]' : '[ ]';
+  cell(ML, Y, CW, 6.5, '5.1 RIESGO EXTERNO:  '+chk(extRisk==='A')+' A (todos a)    '+chk(extRisk==='B')+' B (b>=1)    '+chk(extRisk==='C')+' C (c>=1)', { fill: extRiskFill, bold:true, size:7, align:'C' });
+  Y += 6.5;
+
+  // Sec 6
+  Y = sectionHeader(Y, '6. SE REQUIERE INSPECCION INTERNA?');
+  const inInt = rad('inspeccion_interna');
+  cell(ML, Y, CW/2, 5.5, chk(inInt==='si')+' Si', { size:7, align:'C' });
+  cell(ML+CW/2, Y, CW/2, 5.5, chk(inInt==='no')+' No', { size:7, align:'C' });
+  Y += 5.5;
+
+  // Sec 7: Canvas
+  Y = sectionHeader(Y, '7. CROQUIS DE PLANTA (Piso Critico)');
+  const croquis = canvas.toDataURL('image/png');
+  const cH = 42;
+  doc.addImage(croquis, 'PNG', ML, Y, CW, cH);
+  doc.setLineWidth(0.3); doc.rect(ML, Y, CW, cH, 'S');
+  Y += cH;
+
+  // ===== PAGE 2 =====
+  doc.addPage();
+  Y = MT;
+
+  // Small header
+  doc.setFillColor(30,58,95); doc.rect(ML, Y, CW, 6, 'F');
+  doc.setFontSize(8.5); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text('Instrumento para Inspeccion de Edificaciones Afectadas por Sismos', ML+2, Y+4);
+  Y += 8;
+
+  // Sec 8
+  Y = sectionHeader(Y, '8. INSPECCION INTERNA');
+  cell(ML, Y, CW/2, 5.5, 'Pisos Inspeccionados: '+v('pisos_insp'), { size:7 });
+  cell(ML+CW/2, Y, CW/2, 5.5, 'Piso Critico: '+v('piso_critico'), { size:7 });
+  Y += 5.5;
+
+  const intCols = [['Elemento Estructural',32],['Sin Dano (I)',15],['Leve (II)',15],['Moderado (III)',18],['Severo (IV)',15],['Completo (V)',15],['Total',11],['% I',10],['% II',10],['% III',11],['% IV',11],['% V',11]];
+  let iix = ML;
+  intCols.forEach(([h,w]) => { cell(iix, Y, w, 5.5, h, { fill:[220,228,236], bold:true, size:6.5, align:'C' }); iix += w; });
+  Y += 5.5;
+
+  const dmgFills = [null, [220,252,231],[209,250,229],[254,249,195],[254,215,170],[254,226,226]];
+  elementos.forEach((el, i) => {
+    const vals = [1,2,3,4,5].map(j => parseInt(document.getElementById('el'+i+'_'+j)?.value||0)||0);
+    const total = vals.reduce((a,b)=>a+b,0);
+    const pcts = [0,1,2,3,4].map(j => total>0?(vals[j]/total*100).toFixed(1)+'%':'-');
+    iix = ML;
+    cell(iix, Y, 32, 5.5, el, { size:7 }); iix+=32;
+    vals.forEach((v2, vi) => {
+      cell(iix, Y, intCols[vi+1][1], 5.5, v2>0?String(v2):'', { fill: v2>0?dmgFills[vi+1]:null, size:7, align:'C' });
+      iix += intCols[vi+1][1];
+    });
+    cell(iix, Y, 11, 5.5, total>0?String(total):'', { fill:[243,244,246], size:7, align:'C' }); iix+=11;
+    pcts.forEach((p,pi) => {
+      const fills5 = [[null],[null],[254,249,195],[254,215,170],[254,226,226]];
+      cell(iix, Y, 10+(pi>=2?1:0), 5.5, p, { fill:p!=='-'&&pi>=2?fills5[pi]:null, size:6, align:'C' }); iix+=(10+(pi>=2?1:0));
+    });
+    Y += 5.5;
+  });
+
+  // Sec 9
+  Y = sectionHeader(Y, '9. DANOS EN ELEMENTOS ESTRUCTURALES');
+  cell(ML, Y, 50, 5.5, 'Porcentaje de Danos', { fill:[220,228,236], bold:true, size:7 });
+  cell(ML+50, Y, (CW-50)/3, 5.5, 'a', { fill:[220,252,231], bold:true, size:7, align:'C' });
+  cell(ML+50+(CW-50)/3, Y, (CW-50)/3, 5.5, 'b', { fill:[254,249,195], bold:true, size:7, align:'C' });
+  cell(ML+50+2*(CW-50)/3, Y, (CW-50)/3, 5.5, 'c', { fill:[254,226,226], bold:true, size:7, align:'C' });
+  Y += 5.5;
+
+  const dmg9 = [
+    ['% dano Moderado (III)', 'dmg3', '< 30%','30-60%','> 60%'],
+    ['% dano Severo (IV)', 'dmg4', '< 10%','10-30%','> 30%'],
+    ['% dano Completo (V)', 'dmg5', '< 1%','1-10%','> 10%'],
+  ];
+  dmg9.forEach(([label, name, a, b, c]) => {
+    const sel = rad(name);
+    const w3 = (CW-50)/3;
+    cell(ML, Y, 50, 5.5, label, { size:7 });
+    [[a,'a'],[b,'b'],[c,'c']].forEach(([txt, val], i) => {
+      const fills = [[220,252,231],[254,249,195],[254,226,226]];
+      const mark = chk(sel===val)+' '+txt;
+      cell(ML+50+i*w3, Y, w3, 5.5, mark, { fill:sel===val?fills[i]:null, size:7, align:'C' });
+    });
+    Y += 5.5;
+  });
+
+  const sRisk = riskLetter('structRiskDisplay');
+  const sRiskF = sRisk==='A'?[220,252,231]:sRisk==='B'?[254,249,195]:sRisk==='C'?[254,226,226]:[243,244,246];
+  cell(ML, Y, CW, 6.5, '9.1 RIESGO ESTRUCTURAL:  '+chk(sRisk==='A')+' A (todos a)    '+chk(sRisk==='B')+' B (b=1, c=0)    '+chk(sRisk==='C')+' C (b>=2 o c>=1)', { fill:sRiskF, bold:true, size:7, align:'C' });
+  Y += 6.5;
+
+  // Sec 10
+  Y = sectionHeader(Y, '10. DANOS EN ELEMENTOS NO ESTRUCTURALES');
+  cell(ML, Y, 60, 5.5, 'Elementos', { fill:[220,228,236], bold:true, size:7 });
+  cell(ML+60, Y, (CW-60)/3, 5.5, 'a - Sin o poco dano', { fill:[220,252,231], bold:true, size:7, align:'C' });
+  cell(ML+60+(CW-60)/3, Y, (CW-60)/3, 5.5, 'b - Grietas / separacion', { fill:[254,249,195], bold:true, size:7, align:'C' });
+  cell(ML+60+2*(CW-60)/3, Y, (CW-60)/3, 5.5, 'c - Peligro de caida', { fill:[254,226,226], bold:true, size:7, align:'C' });
+  Y += 5.5;
+
+  const nsRows = [
+    ['Paredes / tabiqueria','ns_paredes'],
+    ['Escaleras','ns_escaleras'],
+    ['Tanques / balcones','ns_tanques'],
+    ['Fachada / cielo raso / antenas / otros','ns_fachada'],
+  ];
+  nsRows.forEach(([label, name]) => {
+    const sel = rad(name);
+    const w3 = (CW-60)/3;
+    cell(ML, Y, 60, 5.5, label, { size:7 });
+    [['a',0],['b',1],['c',2]].forEach(([val, i2]) => {
+      const fills = [[220,252,231],[254,249,195],[254,226,226]];
+      cell(ML+60+i2*w3, Y, w3, 5.5, chk(sel===val), { fill:sel===val?fills[i2]:null, size:9, align:'C' });
+    });
+    Y += 5.5;
+  });
+
+  const nsRisk = riskLetter('nsRiskDisplay');
+  const nsRiskF = nsRisk==='A'?[220,252,231]:nsRisk==='B'?[254,249,195]:nsRisk==='C'?[254,226,226]:[243,244,246];
+  cell(ML, Y, CW, 6.5, '10.1 RIESGO NO ESTRUCTURAL:  '+chk(nsRisk==='A')+' A    '+chk(nsRisk==='B')+' B    '+chk(nsRisk==='C')+' C', { fill:nsRiskF, bold:true, size:7, align:'C' });
+  Y += 6.5;
+
+  // Sec 11
+  Y = sectionHeader(Y, '11. DECISION FINAL (nivel de riesgo mas desfavorable: 5.1, 9.1 y 10.1)');
+  const finalRisk = (() => {
+    const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
+    if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
+  })();
+  const cardW = CW/3;
+  const decCards = [
+    ['A','Edificacion Inspeccionada. Acceso Permitido (Etiqueta Verde)',[220,252,231]],
+    ['B','Acceso Restringido. Precaucion al Entrar (Etiqueta Amarilla)',[254,249,195]],
+    ['C','Edificacion Insegura. Acceso no Permitido (Etiqueta Roja)',[254,226,226]],
+  ];
+  decCards.forEach(([letter, text, fillColor], di) => {
+    const x = ML + di*cardW;
+    const isActive = finalRisk === letter;
+    cell(x, Y, cardW, 15, chk(isActive)+' '+text, { fill: isActive?fillColor:null, size:7, align:'C', wrap:true });
+  });
+  Y += 15;
+
+  const prevEt = rad('prev_etiqueta');
+  cell(ML, Y, CW, 5.5, '11.1 Inspeccion previa:  '+chk(prevEt==='Verde')+' Verde    '+chk(prevEt==='Amarilla')+' Amarilla    '+chk(prevEt==='Roja')+' Roja    '+chk(prevEt==='ninguna')+' Sin inspeccion previa', { size:7 });
+  Y += 5.5;
+
+  // Sec 12
+  Y = sectionHeader(Y, '12. RECOMENDACIONES');
+  cell(ML, Y, CW/2, 5.5, 'Inspeccion especializada:  '+cb('rec_estructura')+' Estructura    '+cb('rec_geotecnia')+' Geotecnia    '+cb('rec_servicios')+' Servicios', { size:7 });
+  cell(ML+CW/2, Y, CW/2, 5.5, 'Intervencion de:  '+cb('rec_pc_bomberos')+' PC/Bomberos    '+cb('rec_policia')+' Policia    '+cb('rec_autoridades')+' Autoridades', { size:7 });
+  Y += 5.5;
+
+  // Sec 13
+  Y = sectionHeader(Y, '13. MEDIDAS DE SEGURIDAD');
+  cell(ML, Y, CW, 5.5, cb('ms_paso_peatonal')+' Restringir paso peatonal    '+cb('ms_agua')+' Desconectar agua    '+cb('ms_apuntalar')+' Apuntalar', { size:7 }); Y+=5.5;
+  cell(ML, Y, CW, 5.5, cb('ms_trafico')+' Restringir trafico    '+cb('ms_energia')+' Desconectar energia    '+cb('ms_demoler')+' Demoler elementos', { size:7 }); Y+=5.5;
+  cell(ML, Y, CW, 5.5, cb('ms_peligrosas')+' Sustancias peligrosas    '+cb('ms_gas')+' Desconectar gas    '+cb('ms_evacuar')+' Evacuar edificio vecino', { size:7 }); Y+=5.5;
+  cell(ML, Y, CW, 5.5, 'Lugares: '+(v('ms_lugares')||'-'), { size:7 }); Y+=5.5;
+
+  // Sec 14
+  Y = sectionHeader(Y, '14. OBSERVACIONES');
+  cell(ML, Y, CW-35, 5.5, '', { size:7 });
+  cell(ML+CW-35, Y, 35, 5.5, 'Hora Fin: '+v('hora_fin'), { size:7 });
+  Y += 5.5;
+  const obsText = v('observaciones') || '(Sin observaciones)';
+  const obsLines = doc.splitTextToSize(obsText, CW-4);
+  const obsH = Math.max(20, obsLines.length * 4 + 4);
+  doc.setLineWidth(0.3); doc.rect(ML, Y, CW, obsH, 'S');
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  obsLines.forEach((line, li) => doc.text(line, ML+2, Y+4+li*4));
+  Y += obsH;
+
+  // ===== PHOTO PAGES =====
+  if (photos.length > 0) {
+    const photosPerPage = 4;
+    const photoCols = 2;
+    const photoW = (CW - 6) / photoCols;
+    const photoImgH = 58;
+    const photoCellH = photoImgH + 22;
+    const photoLabelH = 8;
+
+    for (let pi = 0; pi < photos.length; pi += photosPerPage) {
+      doc.addPage();
+      let pY = MT;
+      doc.setFillColor(30,58,95); doc.rect(ML, pY, CW, 7, 'F');
+      doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+      doc.text('FOTOGRAFIAS DE LA INSPECCION', ML+CW/2, pY+4.8, { align:'center' });
+      pY += 9;
+      doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+      doc.text('Edificacion: '+(v('nombre_edif')||'-')+'   |   Fecha: '+(v('fecha')||'-'), ML, pY+4);
+      pY += 8;
+
+      photos.slice(pi, pi + photosPerPage).forEach((photo, idx) => {
+        const col = idx % photoCols;
+        const row = Math.floor(idx / photoCols);
+        const px = ML + col * (photoW + 6);
+        const py = pY + row * (photoCellH + photoLabelH + 2);
+        try {
+          doc.addImage(photo.dataUrl, 'JPEG', px, py, photoW, photoImgH, undefined, 'FAST');
+        } catch(e) {
+          doc.setFillColor(220,228,236); doc.rect(px, py, photoW, photoImgH, 'F');
+          doc.setFontSize(7); doc.setTextColor(100,100,100);
+          doc.text('[Imagen no disponible]', px+photoW/2, py+photoImgH/2, { align:'center' });
+        }
+        doc.setLineWidth(0.4); doc.setDrawColor(180,180,180); doc.rect(px, py, photoW, photoImgH, 'S');
+        const metaY = py + photoImgH;
+        doc.setFillColor(245,247,250); doc.rect(px, metaY, photoW, 20, 'F');
+        doc.setLineWidth(0.3); doc.setDrawColor(200,200,200); doc.rect(px, metaY, photoW, 20, 'S');
+        doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(30,58,95);
+        doc.text((pi+idx+1)+'. '+photo.title, px+2, metaY+5, { maxWidth: photoW-4 });
+        doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+        doc.text('Hora: '+photo.timestamp, px+2, metaY+11);
+        const geoTxt = (photo.lat !== '-') ? 'Coord: '+photo.lat+', '+photo.lng : 'Coordenadas no disponibles';
+        doc.text(geoTxt, px+2, metaY+16);
+      });
+    }
+  }
+
+  // Save report to localStorage index
+  try {
+    const reportKey = 'inspeccion_' + Date.now();
+    const reportData = {
+      id: reportKey,
+      edificio: v('nombre_edif') || 'Sin nombre',
+      ciudad: v('ciudad') || '',
+      inspector: v('insp1_nombre') || v('insp2_nombre') || '',
+      fecha: v('fecha') || new Date().toLocaleDateString('es-VE'),
+      riesgo: riskLetter('extRiskDisplay') !== '-' || riskLetter('structRiskDisplay') !== '-' ? (() => {
+        const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
+        if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
+      })() : '-',
+      timestamp: new Date().toISOString(),
+      status: 'final',
+      formState: getFormState()
+    };
+    const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
+    existing.unshift(reportData);
+    localStorage.setItem('inspecciones', JSON.stringify(existing.slice(0, 100)));
+  } catch(e) {}
+
+  const fecha = v('fecha') || 'sin-fecha';
+  const nombre = v('nombre_edif') || 'edificacion';
+  doc.save('Inspeccion_'+nombre.replace(/\s+/g,'-')+'_'+fecha+'.pdf');
+}
+
+
+// ============================================================
+// FORM STATE SAVE / LOAD
+// ============================================================
+function getFormState() {
+  const state = { fields: {}, radios: {}, checkboxes: {}, canvas: null, photos: [] };
+
+  document.querySelectorAll(
+    '#view-form input[type=text], #view-form input[type=date], ' +
+    '#view-form input[type=time], #view-form input[type=number], #view-form textarea'
+  ).forEach(el => { if (el.id) state.fields[el.id] = el.value; });
+
+  const radioNames = new Set();
+  document.querySelectorAll('#view-form input[type=radio]').forEach(r => radioNames.add(r.name));
+  radioNames.forEach(name => {
+    const checked = document.querySelector('#view-form input[name="' + name + '"]:checked');
+    state.radios[name] = checked ? checked.value : null;
+  });
+
+  document.querySelectorAll('#view-form input[type=checkbox]').forEach(el => {
+    if (el.id) state.checkboxes[el.id] = el.checked;
+  });
+
+  state.canvas = canvas.toDataURL('image/png');
+  state.photos = photos.map(p => Object.assign({}, p));
+  return state;
+}
+
+function setFormState(state) {
+  if (!state) return;
+
+  Object.entries(state.fields || {}).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  });
+
+  Object.entries(state.radios || {}).forEach(([name, val]) => {
+    if (val !== null) {
+      const r = document.querySelector('input[name="' + name + '"][value="' + val + '"]');
+      if (r) r.checked = true;
+    }
+  });
+
+  Object.entries(state.checkboxes || {}).forEach(([id, checked]) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = checked;
+  });
+
+  if (state.canvas) {
+    const img = new Image();
+    img.onload = () => { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); };
+    img.src = state.canvas;
+  }
+
+  photos = (state.photos || []).map(p => Object.assign({}, p));
+  renderPhotoGrid();
+
+  elementos.forEach((_, i) => calcRow(i));
+  calcExtRisk(); calcStructRisk(); calcNSRisk(); calcFinalDecision();
+  updateAutosaveBar('Reporte cargado');
+}
+
+function saveDraft() {
+  const state = getFormState();
+  const edificio = document.getElementById('nombre_edif')?.value || 'Sin nombre';
+  const ciudad = document.getElementById('ciudad')?.value || '';
+  const inspector = document.getElementById('insp1_nombre')?.value || document.getElementById('insp2_nombre')?.value || '';
+  const fecha = document.getElementById('fecha')?.value || new Date().toLocaleDateString('es-VE');
+
+  const reportKey = 'inspeccion_draft_' + Date.now();
+  const reportData = {
+    id: reportKey,
+    edificio, ciudad, inspector, fecha,
+    riesgo: (() => {
+      const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
+      if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
+    })(),
+    timestamp: new Date().toISOString(),
+    status: 'draft',
+    formState: state
+  };
+
+  try {
+    const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
+    existing.unshift(reportData);
+    localStorage.setItem('inspecciones', JSON.stringify(existing.slice(0, 100)));
+    updateAutosaveBar('Borrador guardado a las ' + new Date().toLocaleTimeString('es-VE'));
+  } catch(e) {
+    alert('No se pudo guardar el borrador. El almacenamiento puede estar lleno.');
+  }
+}
+
+async function saveFinal() {
+  const edificio = document.getElementById('nombre_edif')?.value || '';
+  if (!edificio) {
+    alert('Por favor ingrese el nombre de la edificacion antes de guardar como final.');
+    return;
+  }
+  if (!await customConfirm('Guardar "' + edificio + '" como inspeccion FINALIZADA? Aparecerá marcada como Finalizado en el índice.')) return;
+  const ciudad = document.getElementById('ciudad')?.value || '';
+  const inspector = document.getElementById('insp1_nombre')?.value || document.getElementById('insp2_nombre')?.value || '';
+  const fecha = document.getElementById('fecha')?.value || new Date().toLocaleDateString('es-VE');
+  const riesgoFinal = (() => {
+    const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
+    if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
+  })();
+  const formState = getFormState();
+  const reportData = {
+    id: 'inspeccion_final_' + Date.now(),
+    edificio, ciudad, inspector, fecha,
+    riesgo: riesgoFinal,
+    timestamp: new Date().toISOString(),
+    status: 'final',
+    formState,
+    synced: false // se marca true cuando llega a Supabase
+  };
+  try {
+    const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
+    existing.unshift(reportData);
+    localStorage.setItem('inspecciones', JSON.stringify(existing.slice(0, 100)));
+    updateAutosaveBar('✅ Inspección guardada como FINAL (local)');
+    loadReportsIndex();
+  } catch(e) {
+    alert('No se pudo guardar localmente. El almacenamiento puede estar lleno.');
+    return;
+  }
+
+  // Intentar sincronizar con Supabase (no bloquea el flujo si falla; el reporte ya está seguro en local)
+  await sincronizarReporteConSupabase(reportData, edificio, ciudad, inspector, fecha, riesgoFinal, formState);
+}
+
+// Envía un reporte finalizado a la tabla `reportes` de Supabase.
+// Si falla (sin internet, etc.) el reporte sigue intacto en localStorage para reintentar después.
+async function sincronizarReporteConSupabase(reportData, edificio, ciudad, inspector, fecha, riesgoFinal, formState) {
+  if (!supabaseClient || !currentUser) {
+    updateAutosaveBar('⚠️ Guardado solo localmente (sin conexión). Se sincronizará más adelante.');
+    return;
+  }
+  try {
+    let reporteId = reportData.supabaseReporteId || null;
+
+    if (!reporteId) {
+      // Primer intento: insertar el reporte completo
+      const { data: inserted, error } = await supabaseClient
+        .from('reportes')
+        .insert({
+          nombre_edificacion: edificio,
+          direccion: ciudad,
+          latitud: null,  // el formulario usa coordenadas UTM (coord_x/coord_y/huso), no lat/lng decimal
+          longitud: null,
+          nivel_riesgo: riesgoFinal,
+          inspector_nombre: inspector,
+          fecha_inspeccion: fecha,
+          datos_completos: formState,
+          inspector_id: currentUser.id
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      reporteId = inserted.id;
+    }
+    // Si reporteId ya existía (reintento), el reporte ya está en Supabase — solo falta subir fotos pendientes
+
+    // Subir las fotos del reporte al bucket, asociadas a este reporte
+    const fotos = (formState.photos || []);
+    const rutasFotos = await subirFotosDelReporte(fotos, reporteId);
+
+    // Guardamos las rutas de las fotos subidas dentro de datos_completos (no requiere columna nueva)
+    if (rutasFotos.length > 0) {
+      const formStateConFotos = Object.assign({}, formState, { fotos_storage_paths: rutasFotos });
+      await supabaseClient
+        .from('reportes')
+        .update({ datos_completos: formStateConFotos })
+        .eq('id', reporteId);
+    }
+
+    const todasLasFotosSubieron = rutasFotos.length === fotos.length;
+
+    // Marcar como sincronizado en localStorage (solo completo si subieron TODAS las fotos)
+    const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
+    const idx = existing.findIndex(r => r.id === reportData.id);
+    if (idx !== -1) {
+      existing[idx].synced = todasLasFotosSubieron;
+      existing[idx].supabaseReporteId = reporteId; // evita re-insertar el reporte en un reintento
+      existing[idx].fotosSubidas = rutasFotos.length;
+      localStorage.setItem('inspecciones', JSON.stringify(existing));
+    }
+
+    const mensajeFotos = fotos.length > 0 ? ` (${rutasFotos.length}/${fotos.length} fotos subidas)` : '';
+    updateAutosaveBar(todasLasFotosSubieron
+      ? '✅ Inspección guardada y sincronizada con el servidor' + mensajeFotos
+      : '⚠️ Reporte guardado, pero faltan fotos por subir' + mensajeFotos + ' — se reintentará');
+    loadReportsIndex();
+  } catch (e) {
+    console.error('Error al sincronizar con Supabase:', e);
+    updateAutosaveBar('⚠️ Guardado localmente. No se pudo sincronizar (sin conexión) — se reintentará.');
+  }
+}
+
+// Convierte un dataUrl (Base64) a Blob, necesario para subir a Supabase Storage
+function dataUrlToBlob(dataUrl) {
+  const [meta, base64] = dataUrl.split(',');
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// Sube todas las fotos de un reporte al bucket 'fotos-reportes', en una carpeta por reporte.
+// Devuelve la lista de rutas subidas exitosamente (las que fallan simplemente se omiten,
+// ya que el reporte y sus datos ya están seguros; las fotos quedan en localStorage igual).
+async function subirFotosDelReporte(fotos, reporteId) {
+  const rutasSubidas = [];
+  for (let i = 0; i < fotos.length; i++) {
+    try {
+      const blob = dataUrlToBlob(fotos[i].dataUrl);
+      const ruta = `${currentUser.id}/${reporteId}/foto_${i + 1}.jpg`;
+      const { error } = await supabaseClient.storage
+        .from('fotos-reportes')
+        .upload(ruta, blob, { contentType: 'image/jpeg', upsert: true });
+      if (error) throw error;
+      rutasSubidas.push(ruta);
+    } catch (e) {
+      console.error('No se pudo subir la foto ' + (i + 1) + ':', e);
+      // continúa con las demás fotos; esta se reintentará en la próxima sincronización
+    }
+  }
+  return rutasSubidas;
+}
+
+// Reintenta sincronizar todos los reportes finales pendientes (synced: false).
+// Se llama al recuperar conexión o al iniciar sesión.
+async function reintentarSincronizacionPendiente() {
+  if (!supabaseClient || !currentUser) return;
+  let reports = [];
+  try { reports = JSON.parse(localStorage.getItem('inspecciones') || '[]'); } catch(e) { return; }
+  const pendientes = reports.filter(r => r.status === 'final' && r.synced === false);
+  for (const r of pendientes) {
+    await sincronizarReporteConSupabase(
+      r, r.edificio, r.ciudad, r.inspector, r.fecha, r.riesgo, r.formState
+    );
+  }
+}
+
+async function loadReport(i) {
+  let reports = [];
+  try { reports = JSON.parse(localStorage.getItem('inspecciones') || '[]'); } catch(e) {}
+  const r = reports[i];
+  if (!r || !r.formState) {
+    alert('Este reporte fue guardado antes de que existiera la funcion de reapertura y no contiene datos del formulario.');
+    return;
+  }
+  if (!await customConfirm('Cargar "' + r.edificio + '" del ' + r.fecha + '? Se reemplazarán los datos actuales del formulario.')) return;
+  showView('form');
+  setTimeout(() => setFormState(r.formState), 100);
+}
+
+function updateAutosaveBar(msg) {
+  const bar = document.getElementById('autosaveBar');
+  if (bar) { bar.textContent = msg; setTimeout(() => { bar.textContent = ''; }, 4000); }
+}
+
+// Auto-save every 90 seconds while in form view
+setInterval(() => {
+  const formView = document.getElementById('view-form');
+  if (formView && formView.classList.contains('active')) {
+    const edificio = document.getElementById('nombre_edif')?.value;
+    if (edificio) {
+      // Silent auto-save to a dedicated key (not shown in index)
+      try {
+        localStorage.setItem('autosave_draft', JSON.stringify({
+          formState: getFormState(),
+          timestamp: new Date().toISOString()
+        }));
+        updateAutosaveBar('Guardado automatico: ' + new Date().toLocaleTimeString('es-VE'));
+      } catch(e) {}
+    }
+  }
+}, 90000);
+
+
+// ============================================================
+// CUSTOM CONFIRM (replaces browser confirm with Sí/No dialog)
+// ============================================================
+function customConfirm(msg) {
+  return new Promise(resolve => {
+    document.getElementById('confirmMsg').textContent = msg;
+    const overlay = document.getElementById('confirmOverlay');
+    overlay.classList.add('open');
+    const yes = document.getElementById('confirmYes');
+    const no  = document.getElementById('confirmNo');
+    function cleanup(result) {
+      overlay.classList.remove('open');
+      yes.removeEventListener('click', onYes);
+      no.removeEventListener('click', onNo);
+      resolve(result);
+    }
+    function onYes() { cleanup(true); }
+    function onNo()  { cleanup(false); }
+    yes.addEventListener('click', onYes);
+    no.addEventListener('click', onNo);
+  });
+}
+
+
+// ============================================================
+// IMAGE COMPRESSION (reduces ~4MB photos to ~100KB)
+// ============================================================
+function compressImage(dataUrl, callback) {
+  const img = new Image();
+  img.onload = () => {
+    const MAX = 1280; // max dimension px
+    const QUALITY = 0.65; // JPEG quality
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) {
+      const ratio = Math.min(MAX / w, MAX / h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    callback(canvas.toDataURL('image/jpeg', QUALITY));
+  };
+  img.src = dataUrl;
+}
+
+// ============================================================
+// VIEW MANAGEMENT
+// ============================================================
+// Vistas que requieren sesión activa (todas excepto la de autenticación)
+const VISTAS_PROTEGIDAS = ['index', 'checklist', 'form'];
+
+function showView(name) {
+  if (VISTAS_PROTEGIDAS.includes(name) && !currentUser) {
+    showAuthScreen();
+    showAuthMsg('loginMsg', 'Debe iniciar sesión para continuar.', 'err');
+    return;
+  }
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const el = document.getElementById('view-' + name);
+  if (el) { el.classList.add('active'); window.scrollTo(0,0); }
+  if (name === 'index') loadReportsIndex();
+}
+
+async function startInspection() {
+  const required = document.querySelectorAll('.cl-req');
+  const pending = Array.from(required).filter(c => !c.checked).length;
+  if (pending > 0) {
+    if (!await customConfirm('Faltan ' + pending + ' item(s) obligatorio(s) de seguridad. ¿Desea continuar de todas formas?')) return;
+  }
+  showView('form');
+  resetForm();
+}
+
+// ============================================================
+// INDEX / REPORTS
+// ============================================================
+function loadReportsIndex() {
+  const container = document.getElementById('reportsList');
+  let reports = [];
+  try { reports = JSON.parse(localStorage.getItem('inspecciones') || '[]'); } catch(e) {}
+
+  // Sort: finals first, then drafts, then entries without formState
+  reports.sort((a,b) => {
+    const rank = r => r.status === 'final' ? 0 : r.formState ? 1 : 2;
+    return rank(a) - rank(b) || new Date(b.timestamp) - new Date(a.timestamp);
+  });
+
+  if (reports.length === 0) {
+    container.innerHTML = '<div class="index-empty"><div class="ie-icon">&#128203;</div><p>No hay inspecciones guardadas todavia.<br>Inicie una nueva inspeccion para comenzar.</p></div>';
+    return;
+  }
+
+  container.innerHTML = reports.map((r, i) => {
+    const rClass = r.riesgo === 'A' ? 'risk-A-idx' : r.riesgo === 'B' ? 'risk-B-idx' : r.riesgo === 'C' ? 'risk-C-idx' : 'risk-N-idx';
+    const rLabel = r.riesgo || '?';
+    const inspector = r.inspector ? r.inspector : 'Inspector no registrado';
+    const ciudad = r.ciudad ? r.ciudad : '';
+    const edificio = r.edificio || 'Sin nombre';
+    const fecha = r.fecha || '-';
+    const ts = r.timestamp ? new Date(r.timestamp).toLocaleString('es-VE') : '';
+    const hasData = !!(r.formState);
+    const isFinal = r.status === 'final';
+    const borderColor = isFinal ? 'border-left:3px solid var(--verde)' : hasData ? 'border-left:3px solid var(--azul)' : 'border-left:3px solid #e5e7eb';
+    const statusBadge = hasData
+      ? '<span class="' + (isFinal ? 'status-final' : 'status-draft') + '">' + (isFinal ? '✔ Finalizado' : 'Borrador') + '</span>'
+      : '';
+    const syncBadge = isFinal
+      ? (r.synced
+          ? '<span class="status-synced">☁️ Sincronizado</span>'
+          : '<span class="status-pending">⏳ Pendiente de sincronizar</span>')
+      : '';
+    return '<div class="report-card" style="' + borderColor + '">'
+      + '<div class="risk-badge-idx ' + rClass + '">' + rLabel + '</div>'
+      + '<div class="rc-info">'
+      + '<div class="rc-name">' + edificio + (ciudad ? ' &mdash; ' + ciudad : '') + statusBadge + syncBadge + '</div>'
+      + '<div class="rc-meta"><strong>Inspector:</strong> ' + inspector + ' &nbsp;|&nbsp; <strong>Fecha:</strong> ' + fecha + '</div>'
+      + '<div class="rc-meta" style="font-size:10px;color:#c4c4c4">' + ts + '</div>'
+      + '</div>'
+      + (hasData ? '<button class="rc-open" onclick="loadReport(' + i + ')">Abrir</button>&nbsp;' : '')
+      + '<button class="rc-del" onclick="deleteReport(' + i + ')" title="Eliminar">&#x2715;</button>'
+      + '</div>';
+  }).join('');
+}
+
+async function deleteReport(i) {
+  if (!await customConfirm('¿Eliminar este registro del índice?')) return;
+  let reports = [];
+  try { reports = JSON.parse(localStorage.getItem('inspecciones') || '[]'); } catch(e) {}
+  reports.splice(i, 1);
+  localStorage.setItem('inspecciones', JSON.stringify(reports));
+  loadReportsIndex();
+}
+
+// ============================================================
+// CHECKLIST
+// ============================================================
+function updateChecklist() {
+  const required = document.querySelectorAll('.cl-req');
+  const total = document.querySelectorAll('[id^=cl]');
+  const doneReq = Array.from(required).filter(c => c.checked).length;
+  const doneAll = Array.from(total).filter(c => c.checked).length;
+  document.getElementById('clStatus').textContent = doneReq + ' de ' + required.length + ' items obligatorios completados (' + doneAll + ' en total)';
+  document.getElementById('clProgressBar').style.width = (doneAll / total.length * 100) + '%';
+  // Keep button always enabled; visual cue only
+  const btn = document.getElementById('btnStartInsp');
+  if (btn) btn.style.opacity = doneReq < required.length ? '0.6' : '1';
+}
+
+// ============================================================
+// AUTENTICACIÓN (Supabase Auth)
+// ============================================================
+
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('tabLogin').classList.toggle('active', isLogin);
+  document.getElementById('tabRegister').classList.toggle('active', !isLogin);
+  document.getElementById('authLoginForm').style.display = isLogin ? 'block' : 'none';
+  document.getElementById('authRegisterForm').style.display = isLogin ? 'none' : 'block';
+  hideAuthMsg('loginMsg');
+  hideAuthMsg('registerMsg');
+}
+
+function showAuthMsg(id, text, type) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'auth-msg show ' + type;
+}
+function hideAuthMsg(id) {
+  const el = document.getElementById(id);
+  el.className = 'auth-msg';
+}
+
+async function handleLogin() {
+  if (!supabaseClient) {
+    showAuthMsg('loginMsg', '⚠️ Sin conexión al servidor. Necesita internet para iniciar sesión.', 'err');
+    return;
+  }
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  hideAuthMsg('loginMsg');
+  if (!email || !password) {
+    showAuthMsg('loginMsg', 'Ingrese su correo y contraseña.', 'err');
+    return;
+  }
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) {
+    showAuthMsg('loginMsg', traducirErrorAuth(error), 'err');
+    return;
+  }
+  onAuthSuccess(data.user);
+}
+
+async function handleForgotPassword() {
+  if (!supabaseClient) {
+    showAuthMsg('loginMsg', '⚠️ Sin conexión al servidor. Necesita internet para recuperar su contraseña.', 'err');
+    return;
+  }
+  const email = document.getElementById('loginEmail').value.trim();
+  hideAuthMsg('loginMsg');
+  if (!email) {
+    showAuthMsg('loginMsg', 'Ingrese su correo electrónico arriba, luego presione "¿Olvidó su contraseña?" de nuevo.', 'err');
+    return;
+  }
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email);
+  if (error) {
+    showAuthMsg('loginMsg', traducirErrorAuth(error), 'err');
+    return;
+  }
+  showAuthMsg('loginMsg', '✅ Si el correo ' + email + ' tiene una cuenta, recibirá un enlace para restablecer su contraseña.', 'ok');
+}
+
+async function handleRegister() {
+  if (!supabaseClient) {
+    showAuthMsg('registerMsg', '⚠️ Sin conexión al servidor. Necesita internet para crear una cuenta.', 'err');
+    return;
+  }
+  const nombre = document.getElementById('regNombre').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  hideAuthMsg('registerMsg');
+  if (!nombre || !email || !password) {
+    showAuthMsg('registerMsg', 'Complete todos los campos.', 'err');
+    return;
+  }
+  if (password.length < 6) {
+    showAuthMsg('registerMsg', 'La contraseña debe tener al menos 6 caracteres.', 'err');
+    return;
+  }
+  const { data, error } = await supabaseClient.auth.signUp({
+    email, password,
+    options: { data: { nombre_completo: nombre } }
+  });
+  if (error) {
+    showAuthMsg('registerMsg', traducirErrorAuth(error), 'err');
+    return;
+  }
+  if (data.user && !data.session) {
+    // Requiere confirmación por correo
+    showAuthMsg('registerMsg', '✅ Cuenta creada. Revise su correo (' + email + ') para confirmar la cuenta antes de iniciar sesión.', 'ok');
+    return;
+  }
+  onAuthSuccess(data.user);
+}
+
+async function handleLogout() {
+  if (!await customConfirm('¿Cerrar sesión?')) return;
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  showAuthScreen();
+}
+
+function onAuthSuccess(user) {
+  currentUser = { id: user.id, email: user.email, nombre: user.user_metadata?.nombre_completo || '' };
+  document.getElementById('topbarUser').style.display = 'inline';
+  document.getElementById('topbarUser').textContent = '👤 ' + (currentUser.nombre || currentUser.email);
+  document.getElementById('btnLogout').style.display = 'inline-block';
+  showView('index');
+  loadReportsIndex();
+  updateChecklist();
+  reintentarSincronizacionPendiente();
+}
+
+function showAuthScreen() {
+  document.getElementById('topbarUser').style.display = 'none';
+  document.getElementById('btnLogout').style.display = 'none';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-auth').classList.add('active');
+}
+
+function traducirErrorAuth(error) {
+  const msg = error.message || '';
+  if (msg.includes('Invalid login credentials')) return 'Correo o contraseña incorrectos.';
+  if (msg.includes('already registered') || msg.includes('already exists')) return 'Este correo ya tiene una cuenta. Inicie sesión.';
+  if (msg.includes('Email not confirmed')) return 'Debe confirmar su correo antes de iniciar sesión. Revise su bandeja de entrada.';
+  if (msg.includes('Password should be')) return 'La contraseña no cumple los requisitos mínimos.';
+  return 'Ocurrió un error: ' + msg;
+}
+
+// Verifica si ya hay una sesión activa al cargar la app
+async function checkSessionOnLoad() {
+  if (!supabaseClient) {
+    showAuthScreen();
+    showAuthMsg('loginMsg', '⚠️ No se pudo conectar al servidor. Verifique su conexión a internet e intente de nuevo. (La app funciona sin conexión solo si ya inició sesión antes en este dispositivo).', 'err');
+    return;
+  }
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    if (data.session && data.session.user) {
+      onAuthSuccess(data.session.user);
+    } else {
+      showAuthScreen();
+    }
+  } catch (e) {
+    showAuthScreen();
+    showAuthMsg('loginMsg', '⚠️ No se pudo verificar la sesión. Verifique su conexión a internet.', 'err');
+  }
+}
+
+// ============================================================
+// GLOSSARY
+// ============================================================
+function openGlossary() {
+  document.getElementById('glossaryModal').classList.add('open');
+}
+function closeGlossary() {
+  document.getElementById('glossaryModal').classList.remove('open');
+}
+
+// Init
+window.addEventListener('DOMContentLoaded', () => {
+  checkSessionOnLoad();
+});
+
+// Reintenta sincronizar reportes pendientes automáticamente al recuperar conexión
+window.addEventListener('online', () => {
+  updateAutosaveBar('🌐 Conexión recuperada, sincronizando reportes pendientes...');
+  reintentarSincronizacionPendiente();
+});
+</script>
+
+<!-- ===== GLOSSARY MODAL ===== -->
+<div class="modal-overlay" id="glossaryModal">
+  <div class="modal-box" style="max-width:620px;max-height:82vh;overflow-y:auto">
+    <h3 style="color:var(--azul);margin-bottom:4px">Glosario - Boletin ANIH 61</h3>
+    <p style="font-size:11px;color:#9ca3af;margin-bottom:14px">Terminos clave del instrumento de evaluacion de danos post-sismo (FUNVISIS / ANIH)</p>
+    <div class="gloss-entry"><div class="gloss-term">Edificacion Afectada por Sismo</div><div class="gloss-def">Estructura que ha sufrido danos o efectos observables como consecuencia directa de un evento sismico, independientemente de su nivel de afectacion.</div><div class="gloss-ref">Boletin ANIH 61 - Seccion Introduccion</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Inspeccion Externa</div><div class="gloss-def">Evaluacion visual del estado de la edificacion desde el exterior sin acceder a su interior. Evalua amenazas geologicas, asentamientos, inclinacion, colapso y riesgo de edificaciones aledanas.</div><div class="gloss-ref">Seccion 5 - Planilla V22b</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Inspeccion Interna</div><div class="gloss-def">Evaluacion del dano en los elementos estructurales en el interior de la edificacion, identificando el piso critico y cuantificando el porcentaje de dano por nivel (Moderado, Severo, Completo).</div><div class="gloss-ref">Secciones 8 y 9 - Planilla V22b</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Piso Critico</div><div class="gloss-def">Nivel de la edificacion que presenta el mayor nivel de dano o el mayor riesgo de colapso. Es el piso que se evalua con mas detalle en la inspeccion interna.</div><div class="gloss-ref">Seccion 8 - Planilla V22b</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Nivel de Riesgo A (Verde - Acceso Permitido)</div><div class="gloss-def">La edificacion ha sido inspeccionada y puede ser ocupada. Todos los indicadores se clasifican en categoria "a": sin dano significativo.</div><div class="gloss-ref">Seccion 11 - Boletin ANIH 61</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Nivel de Riesgo B (Amarillo - Acceso Restringido)</div><div class="gloss-def">La edificacion presenta danos moderados. Se permite el acceso con precaucion. Al menos un indicador se clasifica en "b" y ninguno en "c".</div><div class="gloss-ref">Seccion 11 - Boletin ANIH 61</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Nivel de Riesgo C (Rojo - No Permitido)</div><div class="gloss-def">La edificacion es insegura. El acceso no esta permitido. Al menos un indicador se clasifica en "c".</div><div class="gloss-ref">Seccion 11 - Boletin ANIH 61</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Dano Moderado (Nivel III)</div><div class="gloss-def">Grietas visibles con perdida parcial de material. Umbral: &lt;30% para "a", 30-60% para "b", &gt;60% para "c".</div><div class="gloss-ref">Tabla de danos - Boletin ANIH 61</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Dano Severo (Nivel IV)</div><div class="gloss-def">Deformaciones permanentes, perdida de seccion o exposicion de armaduras. Umbral: &lt;10% para "a", 10-30% para "b", &gt;30% para "c".</div><div class="gloss-ref">Tabla de danos - Boletin ANIH 61</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Dano Completo (Nivel V)</div><div class="gloss-def">Colapso parcial o total de elementos. Umbral: &lt;1% para "a", 1-10% para "b", &gt;10% para "c".</div><div class="gloss-ref">Tabla de danos - Boletin ANIH 61</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Elementos No Estructurales</div><div class="gloss-def">Componentes que no forman parte del sistema resistente: paredes divisorias, escaleras, tanques, balcones, fachadas, cielo rasos y letreros.</div><div class="gloss-ref">Seccion 10 - Planilla V22b</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Amenaza Geologica</div><div class="gloss-def">Riesgo derivado del terreno: deslizamientos, licuefaccion, derrumbes o asentamientos diferenciales relacionados con el sismo.</div><div class="gloss-ref">Seccion 5 - Planilla V22b</div></div>
+    <div class="gloss-entry"><div class="gloss-term">Etiqueta de Inspeccion</div><div class="gloss-def">Marcador fisico colocado en la edificacion: Verde (A), Amarilla (B) o Roja (C). Debe colocarse en sitio claramente visible a la entrada.</div><div class="gloss-ref">Seccion 11.1 - Planilla V22b</div></div>
+    <div class="gloss-entry"><div class="gloss-term">FUNVISIS</div><div class="gloss-def">Fundacion Venezolana de Investigaciones Sismologicas. Ente rector en Venezuela para investigacion y evaluacion de riesgos sismicos.</div></div>
+    <div class="gloss-entry"><div class="gloss-term">ANIH / Boletin 61</div><div class="gloss-def">Asociacion Nacional de Ingenieros de Venezuela. Boletin tecnico N.o 61 que define la metodologia para la evaluacion expedita de danos en edificaciones post-sismo en Venezuela. Instrumento de referencia oficial para inspectores capacitados.</div><div class="gloss-ref">Boletin ANIH 61 - Marco metodologico</div></div>
+    <button class="btn btn-secondary" style="margin-top:14px" onclick="closeGlossary()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CUSTOM CONFIRM DIALOG ===== -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div class="confirm-msg" id="confirmMsg"></div>
+    <div class="confirm-btns">
+      <button class="confirm-no"  id="confirmNo">No</button>
+      <button class="confirm-yes" id="confirmYes">Sí</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
