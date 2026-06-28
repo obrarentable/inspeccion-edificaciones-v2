@@ -2415,16 +2415,20 @@ async function sincronizarReporteConSupabase(reportData, edificio, ciudad, inspe
 
     if (!reporteId) {
       // Primer intento: insertar el reporte completo
+      // Generar un ID único para el reporte (la columna 'id' es text sin default en Supabase)
+      const supabaseId = crypto.randomUUID ? crypto.randomUUID() : 'rep_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+
       const { data: inserted, error } = await supabaseClient
         .from('reportes')
         .insert({
+          id: supabaseId,
           nombre_edificacion: edificio,
           direccion: ciudad,
           latitud: null,  // el formulario usa coordenadas UTM (coord_x/coord_y/huso), no lat/lng decimal
           longitud: null,
           nivel_riesgo: riesgoFinal,
           inspector_nombre: inspector,
-          fecha_inspeccion: fecha,
+          fecha_inspeccion: fecha || null,
           datos_completos: formState,
           inspector_id: currentUser.id
         })
@@ -2780,6 +2784,11 @@ async function handleRegister() {
     showAuthMsg('registerMsg', 'Complete todos los campos.', 'err');
     return;
   }
+  // Validación básica de formato de correo (antes de llamar a Supabase)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showAuthMsg('registerMsg', 'El correo electrónico no tiene un formato válido (ejemplo: nombre@dominio.com).', 'err');
+    return;
+  }
   if (password.length < 6) {
     showAuthMsg('registerMsg', 'La contraseña debe tener al menos 6 caracteres.', 'err');
     return;
@@ -2826,11 +2835,24 @@ function showAuthScreen() {
 }
 
 function traducirErrorAuth(error) {
-  const msg = error.message || '';
-  if (msg.includes('Invalid login credentials')) return 'Correo o contraseña incorrectos.';
-  if (msg.includes('already registered') || msg.includes('already exists')) return 'Este correo ya tiene una cuenta. Inicie sesión.';
+  // Registrar el error completo en consola para diagnóstico (no se ve en la UI)
+  console.error('Auth error completo:', error);
+
+  // Intentar extraer un mensaje legible de varias propiedades posibles
+  const msg = (error && (error.message || error.error_description || error.error || error.msg)) || '';
+  const code = error && (error.code || error.status || '');
+
+  if (msg.includes('Invalid login credentials') || code === 400) return 'Correo o contraseña incorrectos.';
+  if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('User already registered')) return 'Este correo ya tiene una cuenta. Inicie sesión.';
   if (msg.includes('Email not confirmed')) return 'Debe confirmar su correo antes de iniciar sesión. Revise su bandeja de entrada.';
-  if (msg.includes('Password should be')) return 'La contraseña no cumple los requisitos mínimos.';
+  if (msg.includes('Password should be') || msg.includes('password') && msg.includes('6')) return 'La contraseña debe tener al menos 6 caracteres.';
+  if (msg.includes('rate limit') || msg.includes('Email rate')) return 'Demasiados intentos seguidos. Espere unos minutos antes de volver a intentar.';
+  if (msg.includes('Unable to validate email') || msg.includes('valid email')) return 'El correo electrónico no es válido. Verifique que esté bien escrito.';
+  if (msg.includes('network') || msg.includes('Network') || msg.includes('fetch')) return 'Sin conexión al servidor. Verifique su internet e intente de nuevo.';
+
+  // Si no hay mensaje legible, dar un mensaje útil en vez de mostrar {} críptico
+  if (!msg) return 'Ocurrió un error al procesar la solicitud. Intente de nuevo o contacte soporte.';
+
   return 'Ocurrió un error: ' + msg;
 }
 
