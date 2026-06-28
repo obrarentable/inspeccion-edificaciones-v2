@@ -2316,12 +2316,13 @@ function generatePDF() {
 
 // Sube el PDF generado al bucket de Supabase para que esté disponible en la nube.
 async function subirPDFaSupabase(doc, nombreArchivo) {
+  const blob = doc.output('blob');
   if (!supabaseClient || !currentUser) {
     console.warn('PDF no se subió a la nube (sin sesión o sin conexión)');
+    await guardarPDFPendiente(blob, nombreArchivo);
     return;
   }
   try {
-    const blob = doc.output('blob');
     const ruta = currentUser.id + '/pdfs/' + nombreArchivo;
     const { error } = await supabaseClient.storage
       .from('fotos-reportes')
@@ -2331,7 +2332,54 @@ async function subirPDFaSupabase(doc, nombreArchivo) {
     console.log('PDF subido exitosamente a:', ruta);
   } catch (e) {
     console.error('No se pudo subir el PDF a la nube:', e);
-    updateAutosaveBar('⚠️ PDF generado localmente, pero no se pudo subir a la nube');
+    updateAutosaveBar('⚠️ PDF generado localmente. Se reintentará subir a la nube automáticamente.');
+    await guardarPDFPendiente(blob, nombreArchivo);
+  }
+}
+
+// Guarda el PDF en localStorage (como base64) cuando no se pudo subir a la nube,
+// para reintentar automáticamente más tarde (ver reintentarPDFsPendientes).
+async function guardarPDFPendiente(blob, nombreArchivo) {
+  try {
+    const dataUrl = await blobToDataUrl(blob);
+    const pendientes = JSON.parse(localStorage.getItem('pdfsPendientes') || '[]');
+    // Evita duplicar si ya existe un pendiente con el mismo nombre de archivo
+    const yaExiste = pendientes.some(p => p.nombreArchivo === nombreArchivo);
+    if (!yaExiste) {
+      pendientes.push({ nombreArchivo, dataUrl, timestamp: new Date().toISOString() });
+      localStorage.setItem('pdfsPendientes', JSON.stringify(pendientes));
+    }
+  } catch (e) {
+    console.error('No se pudo guardar el PDF pendiente localmente (posible falta de espacio):', e);
+  }
+}
+
+// Reintenta subir todos los PDFs que quedaron pendientes por falta de conexión.
+// Se llama junto con reintentarSincronizacionPendiente (al iniciar sesión o recuperar señal).
+async function reintentarPDFsPendientes() {
+  if (!supabaseClient || !currentUser) return;
+  let pendientes = [];
+  try { pendientes = JSON.parse(localStorage.getItem('pdfsPendientes') || '[]'); } catch(e) { return; }
+  if (pendientes.length === 0) return;
+
+  const siguenPendientes = [];
+  for (const p of pendientes) {
+    try {
+      const blob = dataUrlToBlob(p.dataUrl);
+      const ruta = currentUser.id + '/pdfs/' + p.nombreArchivo;
+      const { error } = await supabaseClient.storage
+        .from('fotos-reportes')
+        .upload(ruta, blob, { contentType: 'application/pdf', upsert: true });
+      if (error) throw error;
+      console.log('PDF pendiente subido exitosamente:', p.nombreArchivo);
+    } catch (e) {
+      console.error('PDF pendiente sigue sin poder subirse:', p.nombreArchivo, e);
+      siguenPendientes.push(p);
+    }
+  }
+  localStorage.setItem('pdfsPendientes', JSON.stringify(siguenPendientes));
+  if (siguenPendientes.length < pendientes.length) {
+    updateAutosaveBar('✅ ' + (pendientes.length - siguenPendientes.length) + ' PDF(s) pendiente(s) subido(s) a la nube');
   }
 }
 
@@ -2486,6 +2534,14 @@ async function saveFinal() {
     if (!guardadoLocal && reportData.synced) {
       updateAutosaveBar('✅ Inspección enviada al servidor correctamente (no se guardó localmente por falta de espacio)');
     }
+
+    // PASO 3: Generar y subir el PDF automáticamente, para que no dependa de que
+    // el inspector recuerde presionar también el botón "Generar PDF" por separado.
+    try {
+      generatePDF();
+    } catch (e) {
+      console.error('No se pudo generar el PDF automáticamente tras guardar:', e);
+    }
   } finally {
     // Reactivar el botón sin importar si el guardado tuvo éxito o falló,
     // para que el usuario siempre pueda volver a intentar si algo salió mal.
@@ -2609,6 +2665,17 @@ function dataUrlToBlob(dataUrl) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], { type: mime });
+}
+
+// Convierte un Blob a dataUrl (base64), para poder guardar el PDF en localStorage
+// cuando no hay conexión, y reintentar la subida más tarde.
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 // Sube todas las fotos de un reporte al bucket 'fotos-reportes', en una carpeta por reporte.
@@ -3005,6 +3072,7 @@ function onAuthSuccess(user) {
   loadReportsIndex();
   updateChecklist();
   reintentarSincronizacionPendiente();
+  reintentarPDFsPendientes();
 }
 
 function showAuthScreen() {
@@ -3081,6 +3149,7 @@ window.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('online', () => {
   updateAutosaveBar('🌐 Conexión recuperada, sincronizando reportes pendientes...');
   reintentarSincronizacionPendiente();
+  reintentarPDFsPendientes();
 });
 </script>
 
