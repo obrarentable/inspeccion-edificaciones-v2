@@ -2253,7 +2253,7 @@ function generatePDF() {
       edificio: v('nombre_edif') || 'Sin nombre',
       ciudad: v('ciudad') || '',
       inspector: v('insp1_nombre') || v('insp2_nombre') || '',
-      fecha: v('fecha') || new Date().toLocaleDateString('es-VE'),
+      fecha: v('fecha') || new Date().toISOString().slice(0, 10),
       riesgo: riskLetter('extRiskDisplay') !== '-' || riskLetter('structRiskDisplay') !== '-' ? (() => {
         const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
         if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
@@ -2339,7 +2339,7 @@ function saveDraft() {
   const edificio = document.getElementById('nombre_edif')?.value || 'Sin nombre';
   const ciudad = document.getElementById('ciudad')?.value || '';
   const inspector = document.getElementById('insp1_nombre')?.value || document.getElementById('insp2_nombre')?.value || '';
-  const fecha = document.getElementById('fecha')?.value || new Date().toLocaleDateString('es-VE');
+  const fecha = document.getElementById('fecha')?.value || new Date().toISOString().slice(0, 10);
 
   const reportKey = 'inspeccion_draft_' + Date.now();
   const reportData = {
@@ -2373,7 +2373,7 @@ async function saveFinal() {
   if (!await customConfirm('Guardar "' + edificio + '" como inspeccion FINALIZADA? Aparecerá marcada como Finalizado en el índice.')) return;
   const ciudad = document.getElementById('ciudad')?.value || '';
   const inspector = document.getElementById('insp1_nombre')?.value || document.getElementById('insp2_nombre')?.value || '';
-  const fecha = document.getElementById('fecha')?.value || new Date().toLocaleDateString('es-VE');
+  const fecha = document.getElementById('fecha')?.value || new Date().toISOString().slice(0, 10);
   const riesgoFinal = (() => {
     const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
     if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
