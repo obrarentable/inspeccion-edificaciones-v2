@@ -1409,8 +1409,8 @@
   <button class="btn btn-secondary" onclick="showView('index')">← Volver al Índice</button>
   <button class="btn btn-secondary" onclick="resetForm()">🔄 Limpiar Formulario</button>
   <button class="btn btn-save" onclick="saveDraft()">💾 Borrador</button>
-  <button class="btn btn-final" onclick="saveFinal()">✔ Guardar Final</button>
-  <button class="btn btn-primary" onclick="generatePDF()">📄 Generar PDF</button>
+  <button class="btn btn-final" id="btnGuardarFinal" onclick="saveFinal()">✔ Guardar Final</button>
+  <button class="btn btn-primary" id="btnGenerarPDF" onclick="generatePDF()">📄 Generar PDF</button>
 </div>
 <div class="autosave-bar" id="autosaveBar"></div>
 
@@ -1880,7 +1880,13 @@ function checkedUsos() {
 }
 
 function generatePDF() {
-  const { jsPDF } = window.jspdf;
+  // Bloquear el botón mientras se genera el PDF y se sube a Supabase,
+  // para evitar que un segundo clic duplique el registro local del reporte.
+  const btnPdf = document.getElementById('btnGenerarPDF');
+  if (btnPdf) { btnPdf.disabled = true; btnPdf.textContent = '⏳ Generando...'; }
+
+  try {
+    const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
   const PW = 215.9, PH = 279.4;
   const ML = 12, MR = 12, MT = 12;
@@ -2302,6 +2308,10 @@ function generatePDF() {
 
   // Subir el PDF a Supabase Storage automáticamente (no bloquea la descarga)
   subirPDFaSupabase(doc, nombreArchivo);
+  } finally {
+    // Reactivar el botón sin importar si la generación tuvo éxito o falló.
+    if (btnPdf) { btnPdf.disabled = false; btnPdf.textContent = '📄 Generar PDF'; }
+  }
 }
 
 // Sube el PDF generado al bucket de Supabase para que esté disponible en la nube.
@@ -2427,47 +2437,59 @@ async function saveFinal() {
     return;
   }
   if (!await customConfirm('Guardar "' + edificio + '" como inspeccion FINALIZADA? Aparecerá marcada como Finalizado en el índice.')) return;
-  const ciudad = document.getElementById('ciudad')?.value || '';
-  const inspector = document.getElementById('insp1_nombre')?.value || document.getElementById('insp2_nombre')?.value || '';
-  const fecha = document.getElementById('fecha')?.value || new Date().toISOString().slice(0, 10);
-  const riesgoFinal = (() => {
-    const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
-    if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
-  })();
-  const formState = getFormState();
-  const reportData = {
-    id: 'inspeccion_final_' + Date.now(),
-    edificio, ciudad, inspector, fecha,
-    riesgo: riesgoFinal,
-    timestamp: new Date().toISOString(),
-    status: 'final',
-    formState,
-    synced: false // se marca true cuando llega a Supabase
-  };
 
-  // PASO 1: Antes de guardar, liberar espacio limpiando fotos de reportes ya sincronizados
-  liberarEspacioLocalStorage();
+  // Bloquear el botón mientras se procesa el guardado (localStorage + subida a Supabase),
+  // para evitar que un segundo clic (por impaciencia o falta de confirmación visible) cree un reporte duplicado.
+  const btn = document.getElementById('btnGuardarFinal');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando...'; }
 
-  let guardadoLocal = false;
   try {
-    const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
-    existing.unshift(reportData);
-    localStorage.setItem('inspecciones', JSON.stringify(existing.slice(0, 100)));
-    updateAutosaveBar('✅ Inspección guardada como FINAL (local)');
-    loadReportsIndex();
-    guardadoLocal = true;
-  } catch(e) {
-    console.warn('localStorage lleno, intentando sincronizar directamente con Supabase...', e);
-    updateAutosaveBar('⚠️ Almacenamiento local lleno — sincronizando directo con el servidor...');
-    // NO hacemos return — seguimos para intentar enviar a Supabase de todas formas
-  }
+    const ciudad = document.getElementById('ciudad')?.value || '';
+    const inspector = document.getElementById('insp1_nombre')?.value || document.getElementById('insp2_nombre')?.value || '';
+    const fecha = document.getElementById('fecha')?.value || new Date().toISOString().slice(0, 10);
+    const riesgoFinal = (() => {
+      const all = [riskLetter('extRiskDisplay'), riskLetter('structRiskDisplay'), riskLetter('nsRiskDisplay')].filter(r=>r!=='-');
+      if (all.includes('C')) return 'C'; if (all.includes('B')) return 'B'; if (all.length>0) return 'A'; return '-';
+    })();
+    const formState = getFormState();
+    const reportData = {
+      id: 'inspeccion_final_' + Date.now(),
+      edificio, ciudad, inspector, fecha,
+      riesgo: riesgoFinal,
+      timestamp: new Date().toISOString(),
+      status: 'final',
+      formState,
+      synced: false // se marca true cuando llega a Supabase
+    };
 
-  // PASO 2: Intentar sincronizar con Supabase (funciona incluso si el guardado local falló)
-  await sincronizarReporteConSupabase(reportData, edificio, ciudad, inspector, fecha, riesgoFinal, formState);
+    // PASO 1: Antes de guardar, liberar espacio limpiando fotos de reportes ya sincronizados
+    liberarEspacioLocalStorage();
 
-  // Si no se pudo guardar localmente pero sí se sincronizó, avisar al usuario
-  if (!guardadoLocal && reportData.synced) {
-    updateAutosaveBar('✅ Inspección enviada al servidor correctamente (no se guardó localmente por falta de espacio)');
+    let guardadoLocal = false;
+    try {
+      const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
+      existing.unshift(reportData);
+      localStorage.setItem('inspecciones', JSON.stringify(existing.slice(0, 100)));
+      updateAutosaveBar('✅ Inspección guardada como FINAL (local)');
+      loadReportsIndex();
+      guardadoLocal = true;
+    } catch(e) {
+      console.warn('localStorage lleno, intentando sincronizar directamente con Supabase...', e);
+      updateAutosaveBar('⚠️ Almacenamiento local lleno — sincronizando directo con el servidor...');
+      // NO hacemos return — seguimos para intentar enviar a Supabase de todas formas
+    }
+
+    // PASO 2: Intentar sincronizar con Supabase (funciona incluso si el guardado local falló)
+    await sincronizarReporteConSupabase(reportData, edificio, ciudad, inspector, fecha, riesgoFinal, formState);
+
+    // Si no se pudo guardar localmente pero sí se sincronizó, avisar al usuario
+    if (!guardadoLocal && reportData.synced) {
+      updateAutosaveBar('✅ Inspección enviada al servidor correctamente (no se guardó localmente por falta de espacio)');
+    }
+  } finally {
+    // Reactivar el botón sin importar si el guardado tuvo éxito o falló,
+    // para que el usuario siempre pueda volver a intentar si algo salió mal.
+    if (btn) { btn.disabled = false; btn.textContent = '✔ Guardar Final'; }
   }
 }
 
