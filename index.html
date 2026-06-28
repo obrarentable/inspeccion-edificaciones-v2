@@ -2354,13 +2354,16 @@ function saveDraft() {
     formState: state
   };
 
+  // Liberar espacio limpiando fotos de reportes ya sincronizados
+  liberarEspacioLocalStorage();
+
   try {
     const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
     existing.unshift(reportData);
     localStorage.setItem('inspecciones', JSON.stringify(existing.slice(0, 100)));
     updateAutosaveBar('Borrador guardado a las ' + new Date().toLocaleTimeString('es-VE'));
   } catch(e) {
-    alert('No se pudo guardar el borrador. El almacenamiento puede estar lleno.');
+    updateAutosaveBar('⚠️ No se pudo guardar el borrador — almacenamiento lleno. Intente guardar como Final para sincronizar con el servidor.');
   }
 }
 
@@ -2388,19 +2391,55 @@ async function saveFinal() {
     formState,
     synced: false // se marca true cuando llega a Supabase
   };
+
+  // PASO 1: Antes de guardar, liberar espacio limpiando fotos de reportes ya sincronizados
+  liberarEspacioLocalStorage();
+
+  let guardadoLocal = false;
   try {
     const existing = JSON.parse(localStorage.getItem('inspecciones') || '[]');
     existing.unshift(reportData);
     localStorage.setItem('inspecciones', JSON.stringify(existing.slice(0, 100)));
     updateAutosaveBar('✅ Inspección guardada como FINAL (local)');
     loadReportsIndex();
+    guardadoLocal = true;
   } catch(e) {
-    alert('No se pudo guardar localmente. El almacenamiento puede estar lleno.');
-    return;
+    console.warn('localStorage lleno, intentando sincronizar directamente con Supabase...', e);
+    updateAutosaveBar('⚠️ Almacenamiento local lleno — sincronizando directo con el servidor...');
+    // NO hacemos return — seguimos para intentar enviar a Supabase de todas formas
   }
 
-  // Intentar sincronizar con Supabase (no bloquea el flujo si falla; el reporte ya está seguro en local)
+  // PASO 2: Intentar sincronizar con Supabase (funciona incluso si el guardado local falló)
   await sincronizarReporteConSupabase(reportData, edificio, ciudad, inspector, fecha, riesgoFinal, formState);
+
+  // Si no se pudo guardar localmente pero sí se sincronizó, avisar al usuario
+  if (!guardadoLocal && reportData.synced) {
+    updateAutosaveBar('✅ Inspección enviada al servidor correctamente (no se guardó localmente por falta de espacio)');
+  }
+}
+
+// Limpia las fotos (Base64 pesados) de reportes ya sincronizados en localStorage para liberar espacio.
+// Los metadatos (título, coordenadas, timestamp) se mantienen, solo se elimina el dataUrl pesado.
+function liberarEspacioLocalStorage() {
+  try {
+    const reports = JSON.parse(localStorage.getItem('inspecciones') || '[]');
+    let liberado = false;
+    reports.forEach(r => {
+      if (r.synced && r.formState && r.formState.photos) {
+        r.formState.photos = r.formState.photos.map(p => ({
+          title: p.title, lat: p.lat, lng: p.lng, timestamp: p.timestamp,
+          dataUrl: null
+        }));
+        liberado = true;
+      }
+    });
+    if (liberado) {
+      localStorage.setItem('inspecciones', JSON.stringify(reports));
+      console.log('Espacio de localStorage liberado (fotos de reportes ya sincronizados)');
+    }
+  } catch(e) {
+    console.warn('No se pudo liberar espacio de localStorage:', e);
+  }
 }
 
 // Envía un reporte finalizado a la tabla `reportes` de Supabase.
@@ -2461,6 +2500,17 @@ async function sincronizarReporteConSupabase(reportData, edificio, ciudad, inspe
       existing[idx].synced = todasLasFotosSubieron;
       existing[idx].supabaseReporteId = reporteId; // evita re-insertar el reporte en un reintento
       existing[idx].fotosSubidas = rutasFotos.length;
+
+      // CLAVE: Si todas las fotos se subieron exitosamente a Supabase, eliminar los datos
+      // pesados de las fotos del localStorage para liberar espacio (ya están seguros en la nube).
+      // Los metadatos del reporte (texto, riesgo, inspector, etc.) se mantienen — son pequeños.
+      if (todasLasFotosSubieron && existing[idx].formState && existing[idx].formState.photos) {
+        existing[idx].formState.photos = existing[idx].formState.photos.map(p => ({
+          title: p.title, lat: p.lat, lng: p.lng, timestamp: p.timestamp,
+          dataUrl: null  // eliminar el Base64 pesado, ya está en Supabase Storage
+        }));
+      }
+
       localStorage.setItem('inspecciones', JSON.stringify(existing));
     }
 
