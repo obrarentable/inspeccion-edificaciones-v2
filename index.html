@@ -2717,6 +2717,18 @@ async function startInspection() {
 // ============================================================
 // INDEX / REPORTS
 // ============================================================
+// Convierte texto de usuario en texto seguro para insertar con innerHTML,
+// evitando que código HTML/script escrito en campos como "edificio" o "inspector"
+// se ejecute en pantalla (protección XSS).
+function escapeHTML(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function loadReportsIndex() {
   const container = document.getElementById('reportsList');
   let reports = [];
@@ -2736,10 +2748,10 @@ function loadReportsIndex() {
   container.innerHTML = reports.map((r, i) => {
     const rClass = r.riesgo === 'A' ? 'risk-A-idx' : r.riesgo === 'B' ? 'risk-B-idx' : r.riesgo === 'C' ? 'risk-C-idx' : 'risk-N-idx';
     const rLabel = r.riesgo || '?';
-    const inspector = r.inspector ? r.inspector : 'Inspector no registrado';
-    const ciudad = r.ciudad ? r.ciudad : '';
-    const edificio = r.edificio || 'Sin nombre';
-    const fecha = r.fecha || '-';
+    const inspector = escapeHTML(r.inspector ? r.inspector : 'Inspector no registrado');
+    const ciudad = escapeHTML(r.ciudad ? r.ciudad : '');
+    const edificio = escapeHTML(r.edificio || 'Sin nombre');
+    const fecha = escapeHTML(r.fecha || '-');
     const ts = r.timestamp ? new Date(r.timestamp).toLocaleString('es-VE') : '';
     const hasData = !!(r.formState);
     const isFinal = r.status === 'final';
