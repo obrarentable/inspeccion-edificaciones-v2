@@ -2269,7 +2269,32 @@ function generatePDF() {
 
   const fecha = v('fecha') || 'sin-fecha';
   const nombre = v('nombre_edif') || 'edificacion';
-  doc.save('Inspeccion_'+nombre.replace(/\s+/g,'-')+'_'+fecha+'.pdf');
+  const nombreArchivo = 'Inspeccion_'+nombre.replace(/\s+/g,'-')+'_'+fecha+'.pdf';
+  doc.save(nombreArchivo);
+
+  // Subir el PDF a Supabase Storage automáticamente (no bloquea la descarga)
+  subirPDFaSupabase(doc, nombreArchivo);
+}
+
+// Sube el PDF generado al bucket de Supabase para que esté disponible en la nube.
+async function subirPDFaSupabase(doc, nombreArchivo) {
+  if (!supabaseClient || !currentUser) {
+    console.warn('PDF no se subió a la nube (sin sesión o sin conexión)');
+    return;
+  }
+  try {
+    const blob = doc.output('blob');
+    const ruta = currentUser.id + '/pdfs/' + nombreArchivo;
+    const { error } = await supabaseClient.storage
+      .from('fotos-reportes')
+      .upload(ruta, blob, { contentType: 'application/pdf', upsert: true });
+    if (error) throw error;
+    updateAutosaveBar('✅ PDF generado y subido a la nube');
+    console.log('PDF subido exitosamente a:', ruta);
+  } catch (e) {
+    console.error('No se pudo subir el PDF a la nube:', e);
+    updateAutosaveBar('⚠️ PDF generado localmente, pero no se pudo subir a la nube');
+  }
 }
 
 
