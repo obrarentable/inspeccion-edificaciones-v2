@@ -17,11 +17,23 @@
   const SUPABASE_URL = 'https://ifxkvnphfzryrbdbdenm.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmeGt2bnBoZnpyeXJiZGJkZW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NjIyNDAsImV4cCI6MjA5ODEzODI0MH0.X03WLzHz0x-au9_u3M3I_Ux9vRp2Yj6r2KGJ6o3rA40';
   let supabaseClient = null;
+  // Se pone en true si Supabase detecta que la sesión actual viene de un enlace
+  // de "recuperar contraseña" (en vez de un inicio de sesión normal).
+  let isPasswordRecovery = false;
   try {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         persistSession: true,   // mantiene la sesión guardada en el dispositivo
         autoRefreshToken: true  // renueva la sesión automáticamente para que no expire mientras se usa la app
+      }
+    });
+    // Supabase dispara este evento cuando el enlace del correo de "olvidé mi contraseña"
+    // se abre y crea una sesión temporal. Sin esto, la app trataría esa sesión como un
+    // login normal y entraría directo, sin dejar al usuario escribir su nueva contraseña.
+    supabaseClient.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        isPasswordRecovery = true;
+        if (typeof showResetPasswordScreen === 'function') showResetPasswordScreen();
       }
     });
   } catch (e) {
@@ -564,6 +576,16 @@
         <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
         <button class="btn-auth-primary" onclick="handleRegister()">Crear cuenta</button>
         <div class="auth-msg" id="registerMsg"></div>
+      </div>
+
+      <!-- NUEVA CONTRASEÑA (tras hacer clic en el enlace de recuperación del correo) -->
+      <div id="authResetForm" class="auth-form" style="display:none">
+        <label>Nueva contraseña</label>
+        <input type="password" id="resetPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        <label>Confirmar nueva contraseña</label>
+        <input type="password" id="resetPasswordConfirm" placeholder="Repita la contraseña" autocomplete="new-password">
+        <button class="btn-auth-primary" onclick="handleSetNewPassword()">Guardar nueva contraseña</button>
+        <div class="auth-msg" id="resetMsg"></div>
       </div>
 
       <p class="auth-footnote">Este sistema requiere una cuenta de inspector para guardar y sincronizar los reportes de forma segura.</p>
@@ -2811,8 +2833,24 @@ function switchAuthTab(tab) {
   document.getElementById('tabRegister').classList.toggle('active', !isLogin);
   document.getElementById('authLoginForm').style.display = isLogin ? 'block' : 'none';
   document.getElementById('authRegisterForm').style.display = isLogin ? 'none' : 'block';
+  document.getElementById('authResetForm').style.display = 'none';
+  document.querySelector('.auth-tabs').style.display = 'flex';
   hideAuthMsg('loginMsg');
   hideAuthMsg('registerMsg');
+}
+
+// Muestra SOLO el formulario de nueva contraseña, ocultando login/registro y sus pestañas.
+// Se llama cuando Supabase detecta que el usuario llegó por un enlace de recuperación de contraseña.
+function showResetPasswordScreen() {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-auth').classList.add('active');
+  document.querySelector('.auth-tabs').style.display = 'none';
+  document.getElementById('authLoginForm').style.display = 'none';
+  document.getElementById('authRegisterForm').style.display = 'none';
+  document.getElementById('authResetForm').style.display = 'block';
+  document.getElementById('topbarUser').style.display = 'none';
+  document.getElementById('btnLogout').style.display = 'none';
+  hideAuthMsg('resetMsg');
 }
 
 function showAuthMsg(id, text, type) {
@@ -2862,6 +2900,33 @@ async function handleForgotPassword() {
     return;
   }
   showAuthMsg('loginMsg', '✅ Si el correo ' + email + ' tiene una cuenta, recibirá un enlace para restablecer su contraseña.', 'ok');
+}
+
+// Guarda la nueva contraseña cuando el usuario llegó a través del enlace de recuperación.
+// En este punto Supabase ya generó una sesión temporal de recuperación (evento PASSWORD_RECOVERY).
+async function handleSetNewPassword() {
+  const password = document.getElementById('resetPassword').value;
+  const passwordConfirm = document.getElementById('resetPasswordConfirm').value;
+  hideAuthMsg('resetMsg');
+  if (!password || !passwordConfirm) {
+    showAuthMsg('resetMsg', 'Complete ambos campos.', 'err');
+    return;
+  }
+  if (password.length < 6) {
+    showAuthMsg('resetMsg', 'La contraseña debe tener al menos 6 caracteres.', 'err');
+    return;
+  }
+  if (password !== passwordConfirm) {
+    showAuthMsg('resetMsg', 'Las contraseñas no coinciden.', 'err');
+    return;
+  }
+  const { data, error } = await supabaseClient.auth.updateUser({ password });
+  if (error) {
+    showAuthMsg('resetMsg', traducirErrorAuth(error), 'err');
+    return;
+  }
+  showAuthMsg('resetMsg', '✅ Contraseña actualizada. Entrando...', 'ok');
+  setTimeout(() => onAuthSuccess(data.user), 1200);
 }
 
 async function handleRegister() {
@@ -2958,6 +3023,12 @@ async function checkSessionOnLoad() {
   }
   try {
     const { data } = await supabaseClient.auth.getSession();
+    // Si la sesión viene de un enlace de recuperación de contraseña, no entrar a la app:
+    // mostrar primero el formulario de nueva contraseña.
+    if (isPasswordRecovery) {
+      showResetPasswordScreen();
+      return;
+    }
     if (data.session && data.session.user) {
       onAuthSuccess(data.session.user);
     } else {
