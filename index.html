@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Inspección Sísmica">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>Evaluación de Daños en Edificaciones – FUNVISIS</title>
+<title>Evaluación de Daños en Edificaciones</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -534,7 +534,7 @@
 
 <!-- ===== TOPBAR ===== -->
 <div class="app-topbar">
-  <span class="app-title">🏛 Evaluación de Daños ANIH – Venezuela</span>
+  <span class="app-title">🏛 Evaluación de Daños – Venezuela</span>
   <div class="topbar-actions">
     <span class="topbar-user" id="topbarUser" style="display:none"></span>
     <button class="btn-topbar" onclick="showView('index')">🏠 Inicio</button>
@@ -597,15 +597,15 @@
 <div id="view-index" class="view active">
   <div class="index-hero">
     <h1>Sistema de Inspección de Edificaciones</h1>
-    <p>Instrumento para Evaluación de Daños Post-Sismo · FUNVISIS · Boletín ANIH 61</p>
+    <p>Instrumento para Evaluación de Daños Post-Sismo</p>
   </div>
   <div class="index-body">
 
     <!-- Descripción y proceso -->
     <div class="index-about">
-      <p class="index-about-desc">Herramienta digital oficial para la evaluación expedita de daños en edificaciones afectadas por sismos, basada en la metodología del <strong>Boletín ANIH 61 (FUNVISIS)</strong>. Calcula el nivel de riesgo automáticamente y genera el reporte en PDF con el formato oficial de la <strong>Planilla V22b</strong>.</p>
+      <p class="index-about-desc">Herramienta digital oficial para la evaluación expedita de daños en edificaciones afectadas por sismos, basada en la metodología del <strong>Boletín ANIH 61</strong>. Calcula el nivel de riesgo automáticamente y genera el reporte en PDF con el formato oficial de la <strong>Planilla V22b</strong>.</p>
       <div class="index-steps">
-        <div class="istep"><span class="istep-num">①</span><div><strong>Capacitación previa</strong> — El uso de este instrumento está reservado a inspectores certificados por FUNVISIS o ente autorizado.</div></div>
+        <div class="istep"><span class="istep-num">①</span><div><strong>Capacitación previa</strong> — El uso de este instrumento está reservado a inspectores certificados por ente autorizado.</div></div>
         <div class="istep"><span class="istep-num">②</span><div><strong>Material necesario</strong> — Identificación institucional, libreta, bolígrafo, tabla de apoyo, dispositivo móvil con cámara e internet, fisurometro, cinta métrica, plomada de 60 cm, martillo, linterna, tapabocas, gel desinfectante y etiquetas.</div></div>
         <div class="istep"><span class="istep-num">③</span><div><strong>Seguridad personal</strong> — Casco, botas, lentes de seguridad y chaleco reflectante obligatorios. Recorra el perímetro antes de entrar. No toque cables eléctricos. Si detecta gas, cierre la fuente, notifique al propietario y contacte a los bomberos.</div></div>
         <div class="istep"><span class="istep-num">④</span><div><strong>Llenado del formulario</strong> — Complete las 14 secciones del instrumento. Consulte el Manual de Campo para guía detallada por sección.</div></div>
@@ -779,7 +779,6 @@
     <span class="escudo">🇻🇪</span>
   </div>
   <div>
-    <div class="sub">FUNVISIS</div>
     <h1>Instrumento para Inspección de Edificaciones Afectadas por Sismos</h1>
   </div>
 </header>
@@ -1930,12 +1929,11 @@ function generatePDF() {
   // ===== PAGE 1 =====
   // Header
   doc.setFillColor(30, 58, 95);
-  doc.rect(ML, Y, CW, 9, 'F');
+  doc.rect(ML, Y, CW, 7, 'F');
   doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(255,255,255);
-  doc.text('Instrumento para Inspección de Edificaciones Afectadas por Sismos', ML+CW/2, Y+5.5, { align:'center' });
+  doc.text('Instrumento para Inspección de Edificaciones Afectadas por Sismos', ML+CW/2, Y+4.5, { align:'center' });
   doc.setFontSize(7); doc.setFont('helvetica','normal');
-  doc.text('FUNVISIS', ML+CW/2, Y+8, { align:'center' });
-  Y += 11;
+  Y += 9;
 
   // Section 1: Inspectores
   Y = sectionHeader(Y, '1. DATOS DE LOS INSPECTORES');
@@ -3157,7 +3155,7 @@ window.addEventListener('online', () => {
 <div class="modal-overlay" id="glossaryModal">
   <div class="modal-box" style="max-width:620px;max-height:82vh;overflow-y:auto">
     <h3 style="color:var(--azul);margin-bottom:4px">Glosario - Boletin ANIH 61</h3>
-    <p style="font-size:11px;color:#9ca3af;margin-bottom:14px">Terminos clave del instrumento de evaluacion de danos post-sismo (FUNVISIS / ANIH)</p>
+    <p style="font-size:11px;color:#9ca3af;margin-bottom:14px">Terminos clave del instrumento de evaluacion de danos post-sismo</p>
     <div class="gloss-entry"><div class="gloss-term">Edificacion Afectada por Sismo</div><div class="gloss-def">Estructura que ha sufrido danos o efectos observables como consecuencia directa de un evento sismico, independientemente de su nivel de afectacion.</div><div class="gloss-ref">Boletin ANIH 61 - Seccion Introduccion</div></div>
     <div class="gloss-entry"><div class="gloss-term">Inspeccion Externa</div><div class="gloss-def">Evaluacion visual del estado de la edificacion desde el exterior sin acceder a su interior. Evalua amenazas geologicas, asentamientos, inclinacion, colapso y riesgo de edificaciones aledanas.</div><div class="gloss-ref">Seccion 5 - Planilla V22b</div></div>
     <div class="gloss-entry"><div class="gloss-term">Inspeccion Interna</div><div class="gloss-def">Evaluacion del dano en los elementos estructurales en el interior de la edificacion, identificando el piso critico y cuantificando el porcentaje de dano por nivel (Moderado, Severo, Completo).</div><div class="gloss-ref">Secciones 8 y 9 - Planilla V22b</div></div>
